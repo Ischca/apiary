@@ -1,0 +1,494 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 550" width="900" height="550">
+  <defs>
+    <style>
+      text, tspan {
+        font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'JetBrains Mono', 'Consolas', monospace;
+        font-size: 11px;
+      }
+
+      /* ── keyframes (12s loop) ─────────────────────── */
+
+      /* Phase 1: 0-4s   (0%-33.33%)   Home screen */
+      /* Phase 2: 4-6s   (33.33%-50%)  Cursor move + Permission panel */
+      /* Phase 3: 6-8s   (50%-66.67%)  Approve */
+      /* Phase 4: 8-10s  (66.67%-83.33%) Status update */
+      /* Phase 5: 10-12s (83.33%-100%) Hold then loop */
+
+      /* Cursor highlight on Pod 1 (phase 1 + phase 4-5) */
+      @keyframes cursorPod1 {
+        0%, 30%   { opacity: 1; }
+        34%, 62%  { opacity: 0; }
+        67%, 100% { opacity: 1; }
+      }
+
+      /* Cursor highlight on Pod 3 (phase 2 + phase 3) */
+      @keyframes cursorPod3 {
+        0%, 30%   { opacity: 0; }
+        34%, 62%  { opacity: 1; }
+        67%, 100% { opacity: 0; }
+      }
+
+      /* Left panel: Home mode (phase 1, 4, 5) */
+      @keyframes homePanel {
+        0%, 30%   { opacity: 1; }
+        34%, 62%  { opacity: 0; }
+        67%, 100% { opacity: 1; }
+      }
+      /* Left panel: Permission mode (phase 2) */
+      @keyframes permPanel {
+        0%, 30%   { opacity: 0; }
+        34%, 46%  { opacity: 1; }
+        50%, 100% { opacity: 0; }
+      }
+      /* Left panel: Permission with approve highlight (phase 3) */
+      @keyframes permApprove {
+        0%, 46%   { opacity: 0; }
+        50%, 62%  { opacity: 1; }
+        67%, 100% { opacity: 0; }
+      }
+
+      /* Approved flash message overlay */
+      @keyframes approvalFlash {
+        0%, 52%   { opacity: 0; }
+        54%, 62%  { opacity: 1; }
+        67%, 100% { opacity: 0; }
+      }
+
+      /* Pod 3 border: amber -> blue */
+      @keyframes podBorderAmber {
+        0%, 62%   { opacity: 1; }
+        67%, 100% { opacity: 0; }
+      }
+      @keyframes podBorderBlue {
+        0%, 62%   { opacity: 0; }
+        67%, 100% { opacity: 1; }
+      }
+
+      /* Pod 3 title bar: amber -> blue */
+      @keyframes pod3TitleAmber {
+        0%, 62%   { opacity: 1; }
+        67%, 100% { opacity: 0; }
+      }
+      @keyframes pod3TitleBlue {
+        0%, 62%   { opacity: 0; }
+        67%, 100% { opacity: 1; }
+      }
+
+      /* Warning count 1 -> 0 */
+      @keyframes warnOne {
+        0%, 62%   { opacity: 1; }
+        67%, 100% { opacity: 0; }
+      }
+      @keyframes warnZero {
+        0%, 62%   { opacity: 0; }
+        67%, 100% { opacity: 1; }
+      }
+
+      /* Status bar mode text */
+      @keyframes modeHome {
+        0%, 30%   { opacity: 1; }
+        34%, 62%  { opacity: 0; }
+        67%, 100% { opacity: 1; }
+      }
+      @keyframes modePerm {
+        0%, 30%   { opacity: 0; }
+        34%, 62%  { opacity: 1; }
+        67%, 100% { opacity: 0; }
+      }
+
+      /* Home alert: "1 permission pending" vs "No alerts" */
+      @keyframes alertPending {
+        0%, 62%   { opacity: 1; }
+        67%, 100% { opacity: 0; }
+      }
+      @keyframes alertClear {
+        0%, 62%   { opacity: 0; }
+        67%, 100% { opacity: 1; }
+      }
+
+      /* Blinking cursor */
+      @keyframes blink {
+        0%, 49% { opacity: 1; }
+        50%, 100% { opacity: 0; }
+      }
+
+      .cursor-pod1   { animation: cursorPod1 12s infinite; }
+      .cursor-pod3   { animation: cursorPod3 12s infinite; }
+      .home-panel    { animation: homePanel 12s infinite; }
+      .perm-panel    { animation: permPanel 12s infinite; }
+      .perm-approve  { animation: permApprove 12s infinite; }
+      .approval-msg  { animation: approvalFlash 12s infinite; }
+      .pod3-amber    { animation: podBorderAmber 12s infinite; }
+      .pod3-blue     { animation: podBorderBlue 12s infinite; }
+      .pod3-title-a  { animation: pod3TitleAmber 12s infinite; }
+      .pod3-title-b  { animation: pod3TitleBlue 12s infinite; }
+      .warn-one      { animation: warnOne 12s infinite; }
+      .warn-zero     { animation: warnZero 12s infinite; }
+      .mode-home     { animation: modeHome 12s infinite; }
+      .mode-perm     { animation: modePerm 12s infinite; }
+      .alert-pending { animation: alertPending 12s infinite; }
+      .alert-clear   { animation: alertClear 12s infinite; }
+      .cursor-blink  { animation: blink 1s step-end infinite; }
+    </style>
+
+    <clipPath id="termClip">
+      <rect x="0" y="0" width="900" height="550" rx="10" ry="10"/>
+    </clipPath>
+  </defs>
+
+  <g clip-path="url(#termClip)">
+    <!-- ══════════════════════════════════════════════ -->
+    <!-- Terminal Window Chrome                         -->
+    <!-- ══════════════════════════════════════════════ -->
+    <rect width="900" height="550" fill="#1a1a2e"/>
+
+    <!-- Title bar -->
+    <rect width="900" height="32" fill="#12122a"/>
+    <circle cx="20" cy="16" r="6" fill="#ff5f57"/>
+    <circle cx="40" cy="16" r="6" fill="#febc2e"/>
+    <circle cx="60" cy="16" r="6" fill="#28c840"/>
+    <text x="450" y="20" text-anchor="middle" fill="#8888aa" font-size="12" font-weight="600">apiary</text>
+    <line x1="0" y1="32" x2="900" y2="32" stroke="#2a2a4a" stroke-width="1"/>
+
+    <!-- Vertical divider between panels -->
+    <line x1="315" y1="32" x2="315" y2="520" stroke="#2a2a4a" stroke-width="1"/>
+
+    <!-- Status bar background -->
+    <rect x="0" y="520" width="900" height="30" fill="#12122a"/>
+    <line x1="0" y1="520" x2="900" y2="520" stroke="#2a2a4a" stroke-width="1"/>
+
+
+    <!-- ══════════════════════════════════════════════ -->
+    <!-- LEFT PANEL - HOME MODE (phase 1, 4, 5)        -->
+    <!-- ══════════════════════════════════════════════ -->
+    <g class="home-panel">
+      <text x="20" y="56" fill="#7c8aff" font-size="13" font-weight="600">Home</text>
+      <line x1="12" y1="64" x2="303" y2="64" stroke="#2a2a4a" stroke-width="1"/>
+
+      <!-- ASCII art logo -->
+      <text x="158" y="100" text-anchor="middle" fill="#5a5a8a" font-size="11">
+        <tspan x="158" dy="0">     _    ____ ___    _    ______   __</tspan>
+        <tspan x="158" dy="14">    / \  |  _ \_ _|  / \  |  _ \ \ / /</tspan>
+        <tspan x="158" dy="14">   / _ \ | |_) | |  / _ \ | |_) \ V / </tspan>
+        <tspan x="158" dy="14">  / ___ \|  __/| | / ___ \|  _ &lt; | |  </tspan>
+        <tspan x="158" dy="14"> /_/   \_\_|  |___/_/   \_\_| \_\|_|  </tspan>
+      </text>
+
+      <text x="158" y="195" text-anchor="middle" fill="#6a6a9a" font-size="11">Claude Code Multi-Session Manager</text>
+
+      <!-- Quick actions -->
+      <text x="20" y="240" fill="#8888aa" font-size="11">Quick Actions:</text>
+      <text x="20" y="262" fill="#4a4a7a" font-size="11">[n] New Pod    [d] Detail</text>
+      <text x="20" y="278" fill="#4a4a7a" font-size="11">[c] Chat      [h] Help</text>
+      <text x="20" y="294" fill="#4a4a7a" font-size="11">[p] Permission [q] Quit</text>
+
+      <!-- Recent activity -->
+      <text x="20" y="330" fill="#8888aa" font-size="11">Recent Activity:</text>
+      <text x="20" y="352" fill="#4ade80" font-size="10">&#x2713; hotfix-99 completed (3m ago)</text>
+      <!-- alert: pending (phase 1-3) -->
+      <g class="alert-pending">
+        <text x="20" y="368" fill="#f59e0b" font-size="10">&#x26A0; feature-42 needs permission</text>
+      </g>
+      <!-- alert: clear (phase 4-5) -->
+      <g class="alert-clear">
+        <text x="20" y="368" fill="#4ade80" font-size="10">&#x2713; feature-42 permission approved</text>
+      </g>
+      <text x="20" y="384" fill="#3b82f6" font-size="10">&#x25CB; issue-1234 working (12m)</text>
+      <text x="20" y="400" fill="#3b82f6" font-size="10">&#x25CB; refactor started (1m ago)</text>
+
+      <!-- System info -->
+      <text x="20" y="440" fill="#8888aa" font-size="11">System:</text>
+      <text x="20" y="460" fill="#4a4a7a" font-size="10">CPU: 23%  MEM: 1.2G  Sessions: 6</text>
+      <text x="20" y="476" fill="#4a4a7a" font-size="10">Uptime: 1h 30m 12s</text>
+
+      <!-- Prompt -->
+      <text x="20" y="506" fill="#64748b" font-size="12">&gt;</text>
+      <rect x="32" y="494" width="8" height="14" fill="#7c8aff" class="cursor-blink"/>
+    </g>
+
+
+    <!-- ══════════════════════════════════════════════ -->
+    <!-- LEFT PANEL - PERMISSION MODE (phase 2)        -->
+    <!-- ══════════════════════════════════════════════ -->
+    <g class="perm-panel" opacity="0">
+      <text x="20" y="56" fill="#f59e0b" font-size="13" font-weight="600">Permission Request</text>
+      <line x1="12" y1="64" x2="303" y2="64" stroke="#f59e0b" stroke-width="1" opacity="0.3"/>
+
+      <text x="158" y="100" text-anchor="middle" fill="#f59e0b" font-size="28">&#x26A0;</text>
+
+      <text x="20" y="135" fill="#8888aa" font-size="11">Pod:</text>
+      <text x="90" y="135" fill="#e0e0ff" font-size="11">feature-42</text>
+
+      <text x="20" y="155" fill="#8888aa" font-size="11">Member:</text>
+      <text x="90" y="155" fill="#e0e0ff" font-size="11">tests</text>
+
+      <text x="20" y="175" fill="#8888aa" font-size="11">Tool:</text>
+      <text x="90" y="175" fill="#f59e0b" font-size="11">Bash</text>
+
+      <line x1="20" y1="190" x2="295" y2="190" stroke="#2a2a4a" stroke-width="1"/>
+
+      <text x="20" y="215" fill="#8888aa" font-size="11">Command:</text>
+      <rect x="20" y="225" width="275" height="50" rx="4" fill="#0d0d1a" stroke="#2a2a4a" stroke-width="1"/>
+      <text x="30" y="245" fill="#4ade80" font-size="11">$ npm run test -- --coverage</text>
+      <text x="30" y="263" fill="#4a4a7a" font-size="10">cwd: /workspace/feature-42</text>
+
+      <text x="20" y="300" fill="#8888aa" font-size="11">Reason:</text>
+      <text x="20" y="318" fill="#c0c0e0" font-size="10">Running test suite with coverage</text>
+      <text x="20" y="334" fill="#c0c0e0" font-size="10">to verify implementation changes.</text>
+
+      <line x1="20" y1="355" x2="295" y2="355" stroke="#2a2a4a" stroke-width="1"/>
+
+      <!-- Action buttons (not highlighted) -->
+      <rect x="20" y="375" width="85" height="28" rx="4" fill="#1e1e3a" stroke="#4a4a7a" stroke-width="1"/>
+      <text x="62" y="393" text-anchor="middle" fill="#94a3b8" font-size="11" font-weight="600">[A]pprove</text>
+
+      <rect x="115" y="375" width="70" height="28" rx="4" fill="#1e1e3a" stroke="#4a4a7a" stroke-width="1"/>
+      <text x="150" y="393" text-anchor="middle" fill="#94a3b8" font-size="11" font-weight="600">[D]eny</text>
+
+      <rect x="195" y="375" width="65" height="28" rx="4" fill="#1e1e3a" stroke="#4a4a7a" stroke-width="1"/>
+      <text x="228" y="393" text-anchor="middle" fill="#94a3b8" font-size="11" font-weight="600">[S]kip</text>
+
+      <rect x="20" y="420" width="8" height="14" fill="#f59e0b" class="cursor-blink"/>
+      <text x="32" y="432" fill="#4a4a7a" font-size="10">Waiting for input...</text>
+
+      <text x="20" y="470" fill="#8888aa" font-size="11">History (this pod):</text>
+      <text x="20" y="488" fill="#4ade80" font-size="10">&#x2713; Read src/lib.rs (auto)</text>
+      <text x="20" y="504" fill="#4ade80" font-size="10">&#x2713; Edit src/tests.rs (approved)</text>
+    </g>
+
+
+    <!-- ══════════════════════════════════════════════ -->
+    <!-- LEFT PANEL - PERMISSION + APPROVE (phase 3)   -->
+    <!-- ══════════════════════════════════════════════ -->
+    <g class="perm-approve" opacity="0">
+      <text x="20" y="56" fill="#f59e0b" font-size="13" font-weight="600">Permission Request</text>
+      <line x1="12" y1="64" x2="303" y2="64" stroke="#f59e0b" stroke-width="1" opacity="0.3"/>
+
+      <text x="158" y="100" text-anchor="middle" fill="#f59e0b" font-size="28">&#x26A0;</text>
+
+      <text x="20" y="135" fill="#8888aa" font-size="11">Pod:</text>
+      <text x="90" y="135" fill="#e0e0ff" font-size="11">feature-42</text>
+
+      <text x="20" y="155" fill="#8888aa" font-size="11">Member:</text>
+      <text x="90" y="155" fill="#e0e0ff" font-size="11">tests</text>
+
+      <text x="20" y="175" fill="#8888aa" font-size="11">Tool:</text>
+      <text x="90" y="175" fill="#f59e0b" font-size="11">Bash</text>
+
+      <line x1="20" y1="190" x2="295" y2="190" stroke="#2a2a4a" stroke-width="1"/>
+
+      <text x="20" y="215" fill="#8888aa" font-size="11">Command:</text>
+      <rect x="20" y="225" width="275" height="50" rx="4" fill="#0d0d1a" stroke="#2a2a4a" stroke-width="1"/>
+      <text x="30" y="245" fill="#4ade80" font-size="11">$ npm run test -- --coverage</text>
+      <text x="30" y="263" fill="#4a4a7a" font-size="10">cwd: /workspace/feature-42</text>
+
+      <text x="20" y="300" fill="#8888aa" font-size="11">Reason:</text>
+      <text x="20" y="318" fill="#c0c0e0" font-size="10">Running test suite with coverage</text>
+      <text x="20" y="334" fill="#c0c0e0" font-size="10">to verify implementation changes.</text>
+
+      <line x1="20" y1="355" x2="295" y2="355" stroke="#2a2a4a" stroke-width="1"/>
+
+      <!-- Approve button HIGHLIGHTED -->
+      <rect x="20" y="375" width="85" height="28" rx="4" fill="#166534" stroke="#22c55e" stroke-width="2"/>
+      <text x="62" y="393" text-anchor="middle" fill="#4ade80" font-size="11" font-weight="600">[A]pprove</text>
+
+      <rect x="115" y="375" width="70" height="28" rx="4" fill="#1e1e3a" stroke="#4a4a7a" stroke-width="1"/>
+      <text x="150" y="393" text-anchor="middle" fill="#94a3b8" font-size="11" font-weight="600">[D]eny</text>
+
+      <rect x="195" y="375" width="65" height="28" rx="4" fill="#1e1e3a" stroke="#4a4a7a" stroke-width="1"/>
+      <text x="228" y="393" text-anchor="middle" fill="#94a3b8" font-size="11" font-weight="600">[S]kip</text>
+
+      <text x="20" y="470" fill="#8888aa" font-size="11">History (this pod):</text>
+      <text x="20" y="488" fill="#4ade80" font-size="10">&#x2713; Read src/lib.rs (auto)</text>
+      <text x="20" y="504" fill="#4ade80" font-size="10">&#x2713; Edit src/tests.rs (approved)</text>
+    </g>
+
+
+    <!-- ══════════════════════════════════════════════ -->
+    <!-- APPROVAL FLASH MESSAGE (phase 3, after press) -->
+    <!-- ══════════════════════════════════════════════ -->
+    <g class="approval-msg" opacity="0">
+      <rect x="40" y="415" width="235" height="36" rx="6" fill="#166534" stroke="#22c55e" stroke-width="2"/>
+      <text x="158" y="438" text-anchor="middle" fill="#4ade80" font-size="12" font-weight="600">&#x2713; Permission Approved</text>
+    </g>
+
+
+    <!-- ══════════════════════════════════════════════ -->
+    <!-- RIGHT PANEL - PODS GRID                       -->
+    <!-- ══════════════════════════════════════════════ -->
+
+    <text x="330" y="56" fill="#7c8aff" font-size="13" font-weight="600">Pods</text>
+    <line x1="325" y1="64" x2="888" y2="64" stroke="#2a2a4a" stroke-width="1"/>
+
+
+    <!-- ── Pod 1: issue-1234 (Working) ────────────── -->
+    <!-- Selection highlight for Pod 1 -->
+    <rect x="326" y="71" width="273" height="138" rx="8" fill="none" stroke="#7c8aff" stroke-width="2" stroke-dasharray="6,3" class="cursor-pod1"/>
+
+    <rect x="330" y="75" width="265" height="130" rx="6" fill="#0d0d1a" stroke="#3b82f6" stroke-width="1.5"/>
+    <rect x="330" y="75" width="265" height="24" rx="6" fill="#1e1e3a"/>
+    <rect x="330" y="93" width="265" height="6" fill="#1e1e3a"/>
+    <text x="342" y="91" fill="#93c5fd" font-size="11" font-weight="600">issue-1234</text>
+    <text x="570" y="91" fill="#3b82f6" font-size="10" text-anchor="end">Working</text>
+    <text x="583" y="91" fill="#3b82f6" font-size="10">&#x25CB;</text>
+
+    <text x="342" y="118" fill="#8888aa" font-size="10">Members:</text>
+    <circle cx="350" cy="134" r="4" fill="#3b82f6"/>
+    <text x="360" y="137" fill="#c0c0e0" font-size="10">Lead</text>
+    <text x="400" y="137" fill="#3b82f6" font-size="10">&#x25CB; 12m</text>
+    <circle cx="350" cy="152" r="4" fill="#3b82f6"/>
+    <text x="360" y="155" fill="#c0c0e0" font-size="10">impl</text>
+    <text x="400" y="155" fill="#3b82f6" font-size="10">&#x25CB; 8m</text>
+
+    <rect x="342" y="172" width="241" height="4" rx="2" fill="#1e1e3a"/>
+    <rect x="342" y="172" width="145" height="4" rx="2" fill="#3b82f6" opacity="0.7"/>
+    <text x="342" y="193" fill="#4a4a7a" font-size="9">Tasks: 3/5 completed</text>
+
+
+    <!-- ── Pod 2: hotfix-99 (Done) ────────────────── -->
+    <rect x="605" y="75" width="265" height="130" rx="6" fill="#0d0d1a" stroke="#22c55e" stroke-width="1.5"/>
+    <rect x="605" y="75" width="265" height="24" rx="6" fill="#0f2a1a"/>
+    <rect x="605" y="93" width="265" height="6" fill="#0f2a1a"/>
+    <text x="617" y="91" fill="#86efac" font-size="11" font-weight="600">hotfix-99</text>
+    <text x="840" y="91" fill="#22c55e" font-size="10" text-anchor="end">Done</text>
+    <text x="852" y="91" fill="#22c55e" font-size="10">&#x2713;</text>
+
+    <text x="617" y="118" fill="#8888aa" font-size="10">Members:</text>
+    <circle cx="625" cy="134" r="4" fill="#22c55e"/>
+    <text x="635" y="137" fill="#c0c0e0" font-size="10">claude</text>
+    <text x="685" y="137" fill="#22c55e" font-size="10">&#x2713; 3m</text>
+
+    <rect x="617" y="155" width="241" height="4" rx="2" fill="#1e1e3a"/>
+    <rect x="617" y="155" width="241" height="4" rx="2" fill="#22c55e" opacity="0.7"/>
+    <text x="617" y="176" fill="#4a4a7a" font-size="9">All tasks completed</text>
+    <text x="617" y="193" fill="#22c55e" font-size="9">&#x2713; Finished 3 minutes ago</text>
+
+
+    <!-- ── Pod 3: feature-42 (Permission -> Working) ── -->
+    <!-- Selection highlight for Pod 3 -->
+    <rect x="326" y="211" width="273" height="138" rx="8" fill="none" stroke="#7c8aff" stroke-width="2" stroke-dasharray="6,3" class="cursor-pod3" opacity="0"/>
+
+    <!-- Amber border version (phase 1-3) -->
+    <rect x="330" y="215" width="265" height="130" rx="6" fill="#0d0d1a" stroke="#f59e0b" stroke-width="1.5" class="pod3-amber"/>
+    <!-- Blue border version (phase 4-5) -->
+    <rect x="330" y="215" width="265" height="130" rx="6" fill="#0d0d1a" stroke="#3b82f6" stroke-width="1.5" class="pod3-blue" opacity="0"/>
+
+    <!-- Pod 3 title bar: amber version -->
+    <g class="pod3-title-a">
+      <rect x="330" y="215" width="265" height="24" rx="6" fill="#2a1f0a"/>
+      <rect x="330" y="233" width="265" height="6" fill="#2a1f0a"/>
+      <text x="342" y="231" fill="#fcd34d" font-size="11" font-weight="600">feature-42</text>
+      <text x="555" y="231" fill="#f59e0b" font-size="10" text-anchor="end">Permission</text>
+      <text x="583" y="231" fill="#f59e0b" font-size="10">&#x26A0;</text>
+    </g>
+    <!-- Pod 3 title bar: blue version -->
+    <g class="pod3-title-b" opacity="0">
+      <rect x="330" y="215" width="265" height="24" rx="6" fill="#1e1e3a"/>
+      <rect x="330" y="233" width="265" height="6" fill="#1e1e3a"/>
+      <text x="342" y="231" fill="#93c5fd" font-size="11" font-weight="600">feature-42</text>
+      <text x="563" y="231" fill="#3b82f6" font-size="10" text-anchor="end">Working</text>
+      <text x="583" y="231" fill="#3b82f6" font-size="10">&#x25CB;</text>
+    </g>
+
+    <text x="342" y="258" fill="#8888aa" font-size="10">Members:</text>
+    <circle cx="350" cy="274" r="4" fill="#3b82f6"/>
+    <text x="360" y="277" fill="#c0c0e0" font-size="10">Lead</text>
+    <text x="400" y="277" fill="#3b82f6" font-size="10">&#x25CB; 5m</text>
+
+    <!-- tests member: amber version -->
+    <g class="pod3-title-a">
+      <circle cx="350" cy="292" r="4" fill="#f59e0b"/>
+      <text x="360" y="295" fill="#c0c0e0" font-size="10">tests</text>
+      <text x="400" y="295" fill="#f59e0b" font-size="10">&#x26A0; 2m</text>
+    </g>
+    <!-- tests member: blue version -->
+    <g class="pod3-title-b" opacity="0">
+      <circle cx="350" cy="292" r="4" fill="#3b82f6"/>
+      <text x="360" y="295" fill="#c0c0e0" font-size="10">tests</text>
+      <text x="400" y="295" fill="#3b82f6" font-size="10">&#x25CB; 2m</text>
+    </g>
+
+    <!-- Progress bar -->
+    <rect x="342" y="312" width="241" height="4" rx="2" fill="#1e1e3a"/>
+    <rect x="342" y="312" width="96" height="4" rx="2" fill="#f59e0b" opacity="0.7" class="pod3-amber"/>
+    <rect x="342" y="312" width="120" height="4" rx="2" fill="#3b82f6" class="pod3-blue" opacity="0"/>
+    <text x="342" y="333" fill="#4a4a7a" font-size="9">Tasks: 2/5 completed</text>
+
+
+    <!-- ── Pod 4: refactor (Working) ──────────────── -->
+    <rect x="605" y="215" width="265" height="130" rx="6" fill="#0d0d1a" stroke="#3b82f6" stroke-width="1.5"/>
+    <rect x="605" y="215" width="265" height="24" rx="6" fill="#1e1e3a"/>
+    <rect x="605" y="233" width="265" height="6" fill="#1e1e3a"/>
+    <text x="617" y="231" fill="#93c5fd" font-size="11" font-weight="600">refactor</text>
+    <text x="840" y="231" fill="#3b82f6" font-size="10" text-anchor="end">Working</text>
+    <text x="852" y="231" fill="#3b82f6" font-size="10">&#x25CB;</text>
+
+    <text x="617" y="258" fill="#8888aa" font-size="10">Members:</text>
+    <circle cx="625" cy="274" r="4" fill="#3b82f6"/>
+    <text x="635" y="277" fill="#c0c0e0" font-size="10">claude</text>
+    <text x="685" y="277" fill="#3b82f6" font-size="10">&#x25CB; 1m</text>
+
+    <rect x="617" y="295" width="241" height="4" rx="2" fill="#1e1e3a"/>
+    <rect x="617" y="295" width="24" height="4" rx="2" fill="#3b82f6" opacity="0.7"/>
+    <text x="617" y="316" fill="#4a4a7a" font-size="9">Tasks: 0/3 completed</text>
+    <text x="617" y="333" fill="#4a4a7a" font-size="9">Just started...</text>
+
+
+    <!-- ══════════════════════════════════════════════ -->
+    <!-- BOTTOM GRID DECORATIONS                       -->
+    <!-- ══════════════════════════════════════════════ -->
+    <text x="330" y="375" fill="#4a4a7a" font-size="9">&#x2191;&#x2193;&#x2190;&#x2192; Navigate   Enter Select   n New   q Quit</text>
+
+    <!-- Scrollbar -->
+    <rect x="883" y="75" width="4" height="300" rx="2" fill="#1e1e3a"/>
+    <rect x="883" y="75" width="4" height="80" rx="2" fill="#3a3a5a"/>
+
+
+    <!-- ══════════════════════════════════════════════ -->
+    <!-- STATUS BAR                                    -->
+    <!-- ══════════════════════════════════════════════ -->
+    <text x="20" y="539" fill="#7c8aff" font-size="11">Pods:</text>
+    <text x="55" y="539" fill="#c0c0e0" font-size="11">4</text>
+
+    <text x="75" y="539" fill="#3a3a5a" font-size="11">|</text>
+
+    <!-- Warning count animated -->
+    <g class="warn-one">
+      <text x="90" y="539" fill="#f59e0b" font-size="11">&#x26A0; 1</text>
+    </g>
+    <g class="warn-zero" opacity="0">
+      <text x="90" y="539" fill="#22c55e" font-size="11">&#x26A0; 0</text>
+    </g>
+
+    <text x="125" y="539" fill="#3a3a5a" font-size="11">|</text>
+
+    <text x="140" y="539" fill="#8888aa" font-size="11">Members:</text>
+    <text x="202" y="539" fill="#c0c0e0" font-size="11">6</text>
+
+    <text x="222" y="539" fill="#3a3a5a" font-size="11">|</text>
+
+    <!-- Mode animated -->
+    <text x="237" y="539" fill="#8888aa" font-size="11">Mode:</text>
+    <g class="mode-home">
+      <text x="278" y="539" fill="#7c8aff" font-size="11">Home</text>
+    </g>
+    <g class="mode-perm" opacity="0">
+      <text x="278" y="539" fill="#f59e0b" font-size="11">Permission</text>
+    </g>
+
+    <text x="360" y="539" fill="#3a3a5a" font-size="11">|</text>
+
+    <text x="375" y="539" fill="#8888aa" font-size="11">Work:</text>
+    <text x="416" y="539" fill="#c0c0e0" font-size="11">1h30m</text>
+
+    <text x="465" y="539" fill="#3a3a5a" font-size="11">|</text>
+
+    <text x="480" y="539" fill="#8888aa" font-size="11">&#x2387;</text>
+    <text x="495" y="539" fill="#c0c0e0" font-size="11">main</text>
+
+    <text x="870" y="539" fill="#4a4a7a" font-size="10" text-anchor="end">apiary v0.4.0</text>
+  </g>
+
+  <!-- Window border -->
+  <rect width="900" height="550" rx="10" ry="10" fill="none" stroke="#2a2a4a" stroke-width="1.5"/>
+</svg>

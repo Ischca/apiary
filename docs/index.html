@@ -1,0 +1,1411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Apiary — Mission Control for Your AI Coding Agents</title>
+  <meta name="description" content="Manage multiple Claude Code sessions from a single TUI dashboard. Monitor status, approve permissions, and chat with your agents.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-base: #0f0d1a;
+      --bg-surface: #1a1a2e;
+      --bg-surface-2: #222240;
+      --bg-surface-3: #2a2a4a;
+      --accent-amber: #f59e0b;
+      --accent-amber-light: #fbbf24;
+      --accent-amber-dim: rgba(245, 158, 11, 0.15);
+      --accent-amber-glow: rgba(245, 158, 11, 0.4);
+      --accent-purple: #8b5cf6;
+      --accent-purple-light: #a78bfa;
+      --accent-purple-dim: rgba(139, 92, 246, 0.15);
+      --text-primary: #f0eef6;
+      --text-secondary: #a0a0b8;
+      --text-tertiary: #6b6b80;
+      --border-color: rgba(255, 255, 255, 0.08);
+      --border-color-hover: rgba(255, 255, 255, 0.15);
+      --green: #22c55e;
+      --red: #ef4444;
+      --yellow: #eab308;
+      --font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+      --max-width: 1200px;
+      --radius: 12px;
+      --radius-sm: 8px;
+    }
+
+    *, *::before, *::after {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+      font-size: 16px;
+    }
+
+    body {
+      font-family: var(--font-body);
+      background: var(--bg-base);
+      color: var(--text-primary);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      overflow-x: hidden;
+    }
+
+    .container {
+      max-width: var(--max-width);
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    a {
+      color: var(--accent-amber);
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+
+    a:hover {
+      color: var(--accent-amber-light);
+    }
+
+    .fade-in {
+      opacity: 0;
+      transform: translateY(24px);
+      transition: opacity 0.7s ease, transform 0.7s ease;
+    }
+
+    .fade-in.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* ===== Nav ===== */
+    nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 100;
+      background: rgba(15, 13, 26, 0.85);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    nav .container {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 64px;
+    }
+
+    .nav-logo {
+      font-family: var(--font-mono);
+      font-weight: 700;
+      font-size: 1.25rem;
+      color: var(--accent-amber);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .nav-logo .hex-icon {
+      width: 28px;
+      height: 28px;
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 32px;
+      list-style: none;
+    }
+
+    .nav-links a {
+      color: var(--text-secondary);
+      font-size: 0.875rem;
+      font-weight: 500;
+      transition: color 0.2s;
+    }
+
+    .nav-links a:hover {
+      color: var(--text-primary);
+    }
+
+    .nav-github {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .mobile-menu-btn {
+      display: none;
+      background: none;
+      border: none;
+      color: var(--text-secondary);
+      cursor: pointer;
+      padding: 8px;
+    }
+
+    /* ===== Hero ===== */
+    .hero {
+      position: relative;
+      padding: 160px 0 100px;
+      overflow: hidden;
+    }
+
+    .hero-bg {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+      pointer-events: none;
+    }
+
+    .hero-bg::before {
+      content: '';
+      position: absolute;
+      top: -200px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 800px;
+      height: 800px;
+      background: radial-gradient(circle, var(--accent-amber-glow) 0%, transparent 60%);
+      opacity: 0.3;
+    }
+
+    .hero-bg::after {
+      content: '';
+      position: absolute;
+      top: 100px;
+      right: -200px;
+      width: 600px;
+      height: 600px;
+      background: radial-gradient(circle, var(--accent-purple-dim) 0%, transparent 60%);
+      opacity: 0.5;
+    }
+
+    .hero .container {
+      position: relative;
+      z-index: 1;
+      text-align: center;
+    }
+
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 16px;
+      background: var(--accent-amber-dim);
+      border: 1px solid rgba(245, 158, 11, 0.25);
+      border-radius: 100px;
+      font-size: 0.8rem;
+      font-weight: 500;
+      color: var(--accent-amber-light);
+      margin-bottom: 32px;
+      font-family: var(--font-mono);
+    }
+
+    .hero h1 {
+      font-family: var(--font-mono);
+      font-size: clamp(3.5rem, 8vw, 6rem);
+      font-weight: 900;
+      letter-spacing: -0.03em;
+      line-height: 1.05;
+      margin-bottom: 16px;
+      background: linear-gradient(135deg, var(--accent-amber-light) 0%, var(--accent-amber) 50%, #e08900 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      filter: drop-shadow(0 0 40px var(--accent-amber-glow));
+    }
+
+    .hero-tagline {
+      font-size: clamp(1.1rem, 2.5vw, 1.5rem);
+      font-weight: 500;
+      color: var(--text-primary);
+      margin-bottom: 16px;
+    }
+
+    .hero-sub {
+      font-size: clamp(0.95rem, 1.5vw, 1.1rem);
+      color: var(--text-secondary);
+      max-width: 640px;
+      margin: 0 auto 40px;
+      line-height: 1.7;
+    }
+
+    .hero-cta {
+      display: flex;
+      gap: 16px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-bottom: 80px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 14px 28px;
+      border-radius: var(--radius-sm);
+      font-weight: 600;
+      font-size: 0.95rem;
+      transition: all 0.2s;
+      border: none;
+      cursor: pointer;
+      font-family: var(--font-body);
+    }
+
+    .btn-primary {
+      background: var(--accent-amber);
+      color: var(--bg-base);
+    }
+
+    .btn-primary:hover {
+      background: var(--accent-amber-light);
+      color: var(--bg-base);
+      box-shadow: 0 0 24px var(--accent-amber-glow);
+    }
+
+    .btn-secondary {
+      background: var(--bg-surface-2);
+      color: var(--text-primary);
+      border: 1px solid var(--border-color);
+    }
+
+    .btn-secondary:hover {
+      background: var(--bg-surface-3);
+      border-color: var(--border-color-hover);
+      color: var(--text-primary);
+    }
+
+    /* ===== Terminal Mockup ===== */
+    .terminal-mockup {
+      max-width: 880px;
+      margin: 0 auto;
+      border-radius: var(--radius);
+      overflow: hidden;
+      border: 1px solid var(--border-color);
+      background: var(--bg-surface);
+      box-shadow: 0 24px 80px rgba(0, 0, 0, 0.5), 0 0 60px rgba(245, 158, 11, 0.06);
+    }
+
+    .terminal-titlebar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 16px;
+      background: var(--bg-surface-2);
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .terminal-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+    }
+
+    .terminal-dot.red { background: #ff5f57; }
+    .terminal-dot.yellow { background: #febc2e; }
+    .terminal-dot.green { background: #28c840; }
+
+    .terminal-title {
+      flex: 1;
+      text-align: center;
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      color: var(--text-tertiary);
+    }
+
+    .terminal-body {
+      display: grid;
+      grid-template-columns: 200px 1fr;
+      grid-template-rows: 1fr auto;
+      min-height: 320px;
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+      line-height: 1.5;
+    }
+
+    .terminal-sidebar {
+      grid-row: 1;
+      grid-column: 1;
+      border-right: 1px solid var(--border-color);
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .sidebar-label {
+      color: var(--text-tertiary);
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 4px;
+    }
+
+    .sidebar-item {
+      color: var(--text-secondary);
+      padding: 4px 0;
+    }
+
+    .sidebar-item.active {
+      color: var(--accent-amber);
+    }
+
+    .sidebar-prompt {
+      margin-top: auto;
+      color: var(--text-tertiary);
+    }
+
+    .sidebar-prompt .cursor-blink {
+      display: inline-block;
+      width: 7px;
+      height: 14px;
+      background: var(--accent-amber);
+      animation: blink 1s step-end infinite;
+      vertical-align: middle;
+      margin-left: 2px;
+    }
+
+    @keyframes blink {
+      50% { opacity: 0; }
+    }
+
+    .terminal-main {
+      grid-row: 1;
+      grid-column: 2;
+      padding: 16px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      align-content: start;
+    }
+
+    .pod-card {
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 10px 12px;
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .pod-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+      font-weight: 600;
+      font-size: 0.75rem;
+    }
+
+    .pod-card-header .name {
+      color: var(--text-primary);
+    }
+
+    .pod-status-working { color: var(--accent-amber); }
+    .pod-status-done { color: var(--green); }
+    .pod-status-permission { color: var(--yellow); }
+
+    .pod-member {
+      display: flex;
+      justify-content: space-between;
+      color: var(--text-secondary);
+      font-size: 0.7rem;
+      padding: 2px 0;
+    }
+
+    .terminal-statusbar {
+      grid-row: 2;
+      grid-column: 1 / -1;
+      border-top: 1px solid var(--border-color);
+      padding: 8px 16px;
+      display: flex;
+      gap: 24px;
+      font-size: 0.7rem;
+      color: var(--text-tertiary);
+      background: var(--bg-surface-2);
+    }
+
+    .statusbar-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .statusbar-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+    }
+
+    /* ===== Section Styles ===== */
+    section {
+      padding: 100px 0;
+    }
+
+    .section-label {
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--accent-amber);
+      text-transform: uppercase;
+      letter-spacing: 0.15em;
+      margin-bottom: 16px;
+    }
+
+    .section-title {
+      font-size: clamp(1.75rem, 4vw, 2.5rem);
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      margin-bottom: 16px;
+      line-height: 1.2;
+    }
+
+    .section-desc {
+      font-size: 1.05rem;
+      color: var(--text-secondary);
+      max-width: 600px;
+      line-height: 1.7;
+    }
+
+    /* ===== Problem Section ===== */
+    .problem-section {
+      background: linear-gradient(180deg, var(--bg-base) 0%, var(--bg-surface) 50%, var(--bg-base) 100%);
+    }
+
+    .problem-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 20px;
+      margin-top: 48px;
+    }
+
+    .problem-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius);
+      padding: 28px;
+      transition: border-color 0.3s, transform 0.3s;
+    }
+
+    .problem-card:hover {
+      border-color: rgba(239, 68, 68, 0.3);
+      transform: translateY(-2px);
+    }
+
+    .problem-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 10px;
+      background: rgba(239, 68, 68, 0.1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 16px;
+      font-size: 1.2rem;
+      color: var(--red);
+    }
+
+    .problem-card h3 {
+      font-size: 1rem;
+      font-weight: 700;
+      margin-bottom: 8px;
+      color: var(--text-primary);
+    }
+
+    .problem-card p {
+      font-size: 0.9rem;
+      color: var(--text-secondary);
+      line-height: 1.6;
+    }
+
+    /* ===== Features Section ===== */
+    .features-section {
+      position: relative;
+    }
+
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+      gap: 20px;
+      margin-top: 48px;
+    }
+
+    .feature-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius);
+      padding: 28px;
+      position: relative;
+      overflow: hidden;
+      transition: border-color 0.3s, transform 0.3s;
+    }
+
+    .feature-card:hover {
+      border-color: rgba(245, 158, 11, 0.3);
+      transform: translateY(-2px);
+    }
+
+    .feature-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, var(--accent-amber), var(--accent-purple));
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+
+    .feature-card:hover::before {
+      opacity: 1;
+    }
+
+    .feature-hex {
+      width: 48px;
+      height: 48px;
+      background: var(--accent-amber-dim);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 16px;
+      clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+      font-size: 1.2rem;
+    }
+
+    .feature-card h3 {
+      font-family: var(--font-mono);
+      font-size: 0.95rem;
+      font-weight: 700;
+      margin-bottom: 8px;
+      color: var(--text-primary);
+    }
+
+    .feature-card p {
+      font-size: 0.88rem;
+      color: var(--text-secondary);
+      line-height: 1.6;
+    }
+
+    /* ===== How It Works ===== */
+    .how-section {
+      background: linear-gradient(180deg, var(--bg-base) 0%, var(--bg-surface) 50%, var(--bg-base) 100%);
+    }
+
+    .steps {
+      margin-top: 48px;
+      display: flex;
+      flex-direction: column;
+      gap: 32px;
+      max-width: 700px;
+    }
+
+    .step {
+      display: flex;
+      gap: 24px;
+      align-items: flex-start;
+    }
+
+    .step-number {
+      flex-shrink: 0;
+      width: 44px;
+      height: 44px;
+      background: var(--accent-amber-dim);
+      border: 1px solid rgba(245, 158, 11, 0.25);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-mono);
+      font-weight: 700;
+      font-size: 1rem;
+      color: var(--accent-amber);
+    }
+
+    .step-content h3 {
+      font-size: 1.05rem;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+
+    .step-content p {
+      color: var(--text-secondary);
+      font-size: 0.92rem;
+      line-height: 1.6;
+    }
+
+    .step-content code {
+      font-family: var(--font-mono);
+      background: var(--bg-surface-2);
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 0.85rem;
+      color: var(--accent-amber-light);
+    }
+
+    /* ===== Installation ===== */
+    .install-section {
+      text-align: center;
+    }
+
+    .install-block {
+      max-width: 600px;
+      margin: 40px auto 0;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    .install-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 16px;
+      background: var(--bg-surface-2);
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .install-header span {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      color: var(--text-tertiary);
+    }
+
+    .install-copy {
+      background: none;
+      border: none;
+      color: var(--text-tertiary);
+      cursor: pointer;
+      font-size: 0.8rem;
+      font-family: var(--font-mono);
+      padding: 4px 8px;
+      border-radius: 4px;
+      transition: color 0.2s, background 0.2s;
+    }
+
+    .install-copy:hover {
+      color: var(--text-primary);
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .install-code {
+      padding: 20px 24px;
+      font-family: var(--font-mono);
+      font-size: 1rem;
+      color: var(--accent-amber-light);
+      text-align: left;
+    }
+
+    .install-code .prompt {
+      color: var(--text-tertiary);
+      user-select: none;
+    }
+
+    .install-reqs {
+      margin-top: 24px;
+      display: flex;
+      gap: 24px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    .install-req {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.88rem;
+      color: var(--text-secondary);
+    }
+
+    .install-req-dot {
+      width: 6px;
+      height: 6px;
+      background: var(--accent-purple);
+      border-radius: 50%;
+    }
+
+    /* ===== Shortcuts ===== */
+    .shortcuts-section {
+      background: linear-gradient(180deg, var(--bg-base) 0%, var(--bg-surface) 50%, var(--bg-base) 100%);
+    }
+
+    .shortcuts-table-wrapper {
+      margin-top: 48px;
+      overflow-x: auto;
+    }
+
+    .shortcuts-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+    }
+
+    .shortcuts-table th {
+      text-align: left;
+      padding: 12px 16px;
+      font-family: var(--font-mono);
+      font-weight: 600;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--text-tertiary);
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .shortcuts-table td {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .shortcuts-table tr:hover td {
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .shortcuts-table td:first-child {
+      font-family: var(--font-mono);
+      white-space: nowrap;
+    }
+
+    .shortcuts-table td:last-child {
+      color: var(--text-secondary);
+    }
+
+    kbd {
+      display: inline-block;
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      padding: 2px 8px;
+      background: var(--bg-surface-2);
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      color: var(--accent-amber-light);
+      margin: 0 2px;
+      line-height: 1.6;
+    }
+
+    /* ===== Config ===== */
+    .config-section {
+      text-align: center;
+    }
+
+    .config-block {
+      max-width: 600px;
+      margin: 40px auto 0;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius);
+      overflow: hidden;
+      text-align: left;
+    }
+
+    .config-header {
+      display: flex;
+      align-items: center;
+      padding: 10px 16px;
+      background: var(--bg-surface-2);
+      border-bottom: 1px solid var(--border-color);
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      color: var(--text-tertiary);
+    }
+
+    .config-code {
+      padding: 20px 24px;
+      font-family: var(--font-mono);
+      font-size: 0.82rem;
+      line-height: 1.7;
+      overflow-x: auto;
+    }
+
+    .config-code .comment {
+      color: var(--text-tertiary);
+    }
+
+    .config-code .key {
+      color: var(--accent-amber-light);
+    }
+
+    .config-code .value-str {
+      color: var(--green);
+    }
+
+    .config-code .value-num {
+      color: var(--accent-purple-light);
+    }
+
+    .config-code .value-bool {
+      color: var(--accent-purple-light);
+    }
+
+    .config-code .section-head {
+      color: var(--accent-amber);
+    }
+
+    /* ===== Footer ===== */
+    footer {
+      border-top: 1px solid var(--border-color);
+      padding: 40px 0;
+    }
+
+    .footer-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+
+    .footer-left {
+      display: flex;
+      align-items: center;
+      gap: 24px;
+    }
+
+    .footer-logo {
+      font-family: var(--font-mono);
+      font-weight: 700;
+      font-size: 1rem;
+      color: var(--accent-amber);
+    }
+
+    .footer-copy {
+      font-size: 0.85rem;
+      color: var(--text-tertiary);
+    }
+
+    .footer-links {
+      display: flex;
+      gap: 24px;
+    }
+
+    .footer-links a {
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+    }
+
+    .footer-links a:hover {
+      color: var(--text-primary);
+    }
+
+    /* ===== Responsive ===== */
+    @media (max-width: 768px) {
+      .nav-links {
+        display: none;
+      }
+
+      .mobile-menu-btn {
+        display: block;
+      }
+
+      .nav-links.open {
+        display: flex;
+        flex-direction: column;
+        position: absolute;
+        top: 64px;
+        left: 0;
+        right: 0;
+        background: rgba(15, 13, 26, 0.98);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        padding: 24px;
+        gap: 16px;
+        border-bottom: 1px solid var(--border-color);
+      }
+
+      .hero {
+        padding: 120px 0 60px;
+      }
+
+      .hero-cta {
+        margin-bottom: 48px;
+      }
+
+      .terminal-body {
+        grid-template-columns: 1fr;
+        font-size: 0.7rem;
+      }
+
+      .terminal-sidebar {
+        display: none;
+      }
+
+      .terminal-main {
+        grid-column: 1;
+        grid-template-columns: 1fr;
+      }
+
+      .terminal-statusbar {
+        grid-column: 1;
+        flex-wrap: wrap;
+        gap: 12px;
+      }
+
+      section {
+        padding: 60px 0;
+      }
+
+      .problem-grid,
+      .features-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .step {
+        gap: 16px;
+      }
+
+      .footer-inner {
+        flex-direction: column;
+        text-align: center;
+      }
+
+      .footer-left {
+        flex-direction: column;
+        gap: 8px;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .hero h1 {
+        font-size: 2.8rem;
+      }
+
+      .btn {
+        width: 100%;
+        justify-content: center;
+      }
+
+      .hero-cta {
+        flex-direction: column;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Nav -->
+  <nav>
+    <div class="container">
+      <a href="#" class="nav-logo">
+        <svg class="hex-icon" viewBox="0 0 28 28" fill="none" aria-hidden="true">
+          <path d="M14 2L25.5 8.5V21.5L14 28L2.5 21.5V8.5L14 2Z" stroke="currentColor" stroke-width="1.5" fill="none"/>
+          <path d="M14 8L20 11.5V18.5L14 22L8 18.5V11.5L14 8Z" fill="currentColor" opacity="0.3"/>
+        </svg>
+        apiary
+      </a>
+      <button class="mobile-menu-btn" aria-label="Toggle navigation menu" onclick="document.querySelector('.nav-links').classList.toggle('open')">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
+        </svg>
+      </button>
+      <ul class="nav-links" role="navigation">
+        <li><a href="#features">Features</a></li>
+        <li><a href="#how-it-works">How It Works</a></li>
+        <li><a href="#installation">Installation</a></li>
+        <li><a href="#shortcuts">Shortcuts</a></li>
+        <li><a href="#" class="nav-github">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+          GitHub
+        </a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <!-- Hero -->
+  <section class="hero" id="hero">
+    <div class="hero-bg" aria-hidden="true"></div>
+    <div class="container">
+      <div class="hero-badge">Built with Rust + ratatui</div>
+      <h1>Apiary</h1>
+      <p class="hero-tagline">Mission control for your AI coding agents</p>
+      <p class="hero-sub">Manage multiple Claude Code sessions from a single TUI. Monitor status, approve permissions, and chat with your agents &mdash; all without switching tabs.</p>
+      <div class="hero-cta">
+        <a href="#installation" class="btn btn-primary">Get Started</a>
+        <a href="#" class="btn btn-secondary">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+          View on GitHub
+        </a>
+      </div>
+
+      <!-- Terminal Mockup -->
+      <div class="terminal-mockup fade-in" role="img" aria-label="Apiary TUI dashboard mockup showing four pods with different statuses">
+        <div class="terminal-titlebar">
+          <span class="terminal-dot red" aria-hidden="true"></span>
+          <span class="terminal-dot yellow" aria-hidden="true"></span>
+          <span class="terminal-dot green" aria-hidden="true"></span>
+          <span class="terminal-title">apiary &mdash; 4 pods</span>
+          <span style="width: 36px;" aria-hidden="true"></span>
+        </div>
+        <div class="terminal-body">
+          <div class="terminal-sidebar">
+            <div class="sidebar-label">Context Panel</div>
+            <div class="sidebar-item active">Home</div>
+            <div class="sidebar-item">issue-1234</div>
+            <div class="sidebar-item">hotfix</div>
+            <div class="sidebar-item">feature-42</div>
+            <div class="sidebar-item">refactor</div>
+            <div class="sidebar-prompt"><span style="color: var(--accent-amber);">&gt;</span> <span class="cursor-blink" aria-hidden="true"></span></div>
+          </div>
+          <div class="terminal-main">
+            <div class="pod-card">
+              <div class="pod-card-header">
+                <span class="name">issue-1234</span>
+                <span class="pod-status-working">&#9881; working</span>
+              </div>
+              <div class="pod-member"><span>Lead</span><span class="pod-status-working">&#8635; 12m</span></div>
+              <div class="pod-member"><span>impl</span><span class="pod-status-working">&#8635; 8m</span></div>
+            </div>
+            <div class="pod-card">
+              <div class="pod-card-header">
+                <span class="name">hotfix</span>
+                <span class="pod-status-done">&#10003; done</span>
+              </div>
+              <div class="pod-member"><span>claude</span><span class="pod-status-done">&#10003;</span></div>
+            </div>
+            <div class="pod-card">
+              <div class="pod-card-header">
+                <span class="name">feature-42</span>
+                <span class="pod-status-permission">&#9888; perm</span>
+              </div>
+              <div class="pod-member"><span>Lead</span><span class="pod-status-working">&#8635; 5m</span></div>
+              <div class="pod-member"><span>tests</span><span class="pod-status-permission">&#9888; 2m</span></div>
+            </div>
+            <div class="pod-card">
+              <div class="pod-card-header">
+                <span class="name">refactor</span>
+                <span class="pod-status-working">&#9881; working</span>
+              </div>
+              <div class="pod-member"><span>claude</span><span class="pod-status-working">&#8635; 1m</span></div>
+            </div>
+          </div>
+          <div class="terminal-statusbar">
+            <span class="statusbar-item"><span class="statusbar-dot" style="background: var(--accent-amber);" aria-hidden="true"></span> Pods: 4</span>
+            <span class="statusbar-item"><span class="statusbar-dot" style="background: var(--yellow);" aria-hidden="true"></span> &#9888; 1</span>
+            <span class="statusbar-item">Members: 6</span>
+            <span class="statusbar-item" style="color: var(--accent-amber);">Home</span>
+            <span class="statusbar-item" style="margin-left: auto;">Work: 1h30m</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- The Problem -->
+  <section class="problem-section" id="problem">
+    <div class="container">
+      <div class="fade-in">
+        <div class="section-label">The Problem</div>
+        <h2 class="section-title">AI agents are powerful.<br>Managing them shouldn't be painful.</h2>
+        <p class="section-desc">Running multiple Claude Code sessions across different tasks creates real friction that slows you down.</p>
+      </div>
+      <div class="problem-grid">
+        <div class="problem-card fade-in">
+          <div class="problem-icon" aria-hidden="true">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+          </div>
+          <h3>Missed Permission Requests</h3>
+          <p>Claude Code is blocked in another tab waiting for approval, and you don't even know. Minutes wasted, momentum lost.</p>
+        </div>
+        <div class="problem-card fade-in">
+          <div class="problem-icon" aria-hidden="true">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          </div>
+          <h3>Invisible State</h3>
+          <p>Which session is working? Which finished? Which errored out? You have no overview &mdash; just a row of identical terminal tabs.</p>
+        </div>
+        <div class="problem-card fade-in">
+          <div class="problem-icon" aria-hidden="true">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+          </div>
+          <h3>Context Switch Tax</h3>
+          <p>Cycling through tabs to check on each agent, remembering what each one is doing, rebuilding mental context every time.</p>
+        </div>
+        <div class="problem-card fade-in">
+          <div class="problem-icon" aria-hidden="true">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          </div>
+          <h3>Agent Team Complexity</h3>
+          <p>A single session can spawn multiple teammates, creating a two-level hierarchy that's impossible to track manually.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Features -->
+  <section class="features-section" id="features">
+    <div class="container">
+      <div class="fade-in">
+        <div class="section-label">Features</div>
+        <h2 class="section-title">Everything you need to orchestrate<br>your AI workforce</h2>
+        <p class="section-desc">Purpose-built for managing multiple Claude Code sessions with the speed and clarity you expect from a TUI.</p>
+      </div>
+      <div class="features-grid">
+        <div class="feature-card fade-in">
+          <div class="feature-hex" aria-hidden="true">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--accent-amber)" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+          </div>
+          <h3>Pod Management</h3>
+          <p>All sessions live as Pods. Solo or Team mode, managed uniformly. Create, delete, and organize from one place.</p>
+        </div>
+        <div class="feature-card fade-in">
+          <div class="feature-hex" aria-hidden="true">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--accent-amber)" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          </div>
+          <h3>Real-time Status</h3>
+          <p>See working, idle, permission-needed, error, and done states at a glance. No more tab-cycling to check progress.</p>
+        </div>
+        <div class="feature-card fade-in">
+          <div class="feature-hex" aria-hidden="true">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--accent-amber)" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          </div>
+          <h3>Permission Control</h3>
+          <p>Approve or deny tool use requests directly from the dashboard. One keystroke to unblock your agents.</p>
+        </div>
+        <div class="feature-card fade-in">
+          <div class="feature-hex" aria-hidden="true">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--accent-amber)" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          </div>
+          <h3>Chat Mode</h3>
+          <p>Send messages to agents directly from Apiary. Diff-based response detection for reliable interaction.</p>
+        </div>
+        <div class="feature-card fade-in">
+          <div class="feature-hex" aria-hidden="true">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--accent-amber)" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          </div>
+          <h3>Agent Teams</h3>
+          <p>Auto-discover teammates within sessions. Two-level monitoring gives you visibility into the full hierarchy.</p>
+        </div>
+        <div class="feature-card fade-in">
+          <div class="feature-hex" aria-hidden="true">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--accent-amber)" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          </div>
+          <h3>Adaptive Polling</h3>
+          <p>Smart polling intervals based on agent state. Frequent checks when active, relaxed when idle. Efficient by default.</p>
+        </div>
+        <div class="feature-card fade-in">
+          <div class="feature-hex" aria-hidden="true">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--accent-amber)" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+          </div>
+          <h3>Git Worktree</h3>
+          <p>Create pods with dedicated worktrees for isolated development. Each agent gets its own clean workspace.</p>
+        </div>
+        <div class="feature-card fade-in">
+          <div class="feature-hex" aria-hidden="true">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--accent-amber)" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          </div>
+          <h3>Configurable</h3>
+          <p>Customize behavior, polling intervals, keybindings, and display via a simple config.toml file.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- How It Works -->
+  <section class="how-section" id="how-it-works">
+    <div class="container">
+      <div class="fade-in">
+        <div class="section-label">How It Works</div>
+        <h2 class="section-title">Up and running in minutes</h2>
+        <p class="section-desc">Four steps from install to full orchestration of your AI coding agents.</p>
+      </div>
+      <div class="steps">
+        <div class="step fade-in">
+          <div class="step-number">1</div>
+          <div class="step-content">
+            <h3>Create a Pod</h3>
+            <p>Spin up a new session with an optional worktree for isolated development.</p>
+            <p style="margin-top: 8px;"><code>apiary create issue-1234 --worktree ./worktrees/issue-1234</code></p>
+          </div>
+        </div>
+        <div class="step fade-in">
+          <div class="step-number">2</div>
+          <div class="step-content">
+            <h3>Monitor from the Dashboard</h3>
+            <p>All your pods appear in a grid with real-time status updates. See who's working, who's done, and who needs attention.</p>
+          </div>
+        </div>
+        <div class="step fade-in">
+          <div class="step-number">3</div>
+          <div class="step-content">
+            <h3>Handle Permissions</h3>
+            <p>When an agent needs tool approval, you'll see it immediately. Press <code>a</code> to approve or <code>d</code> to deny.</p>
+          </div>
+        </div>
+        <div class="step fade-in">
+          <div class="step-number">4</div>
+          <div class="step-content">
+            <h3>Chat with Agents</h3>
+            <p>Need to redirect an agent or ask a question? Press <code>c</code> to enter chat mode and communicate directly.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Installation -->
+  <section class="install-section" id="installation">
+    <div class="container">
+      <div class="fade-in">
+        <div class="section-label">Installation</div>
+        <h2 class="section-title">Install in one command</h2>
+        <p class="section-desc" style="margin: 0 auto;">Get Apiary via Cargo, the Rust package manager.</p>
+      </div>
+      <div class="install-block fade-in">
+        <div class="install-header">
+          <span>terminal</span>
+          <button class="install-copy" onclick="navigator.clipboard.writeText('cargo install apiary').then(function() { this.textContent = 'Copied!'; var btn = this; setTimeout(function() { btn.textContent = 'Copy'; }, 1500); }.bind(this))">Copy</button>
+        </div>
+        <div class="install-code">
+          <span class="prompt">$ </span>cargo install apiary
+        </div>
+      </div>
+      <div class="install-reqs fade-in">
+        <div class="install-req"><span class="install-req-dot" aria-hidden="true"></span> tmux &gt;= 3.2</div>
+        <div class="install-req"><span class="install-req-dot" aria-hidden="true"></span> Claude Code CLI</div>
+        <div class="install-req"><span class="install-req-dot" aria-hidden="true"></span> Rust toolchain</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Keyboard Shortcuts -->
+  <section class="shortcuts-section" id="shortcuts">
+    <div class="container">
+      <div class="fade-in">
+        <div class="section-label">Keyboard Shortcuts</div>
+        <h2 class="section-title">Designed for your keyboard</h2>
+        <p class="section-desc">Navigate, manage, and communicate without ever reaching for the mouse.</p>
+      </div>
+      <div class="shortcuts-table-wrapper fade-in">
+        <table class="shortcuts-table">
+          <thead>
+            <tr>
+              <th scope="col">Key</th>
+              <th scope="col">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><kbd>&larr;</kbd> <kbd>&rarr;</kbd> <kbd>&uarr;</kbd> <kbd>&darr;</kbd> / <kbd>h</kbd> <kbd>j</kbd> <kbd>k</kbd> <kbd>l</kbd></td>
+              <td>Navigate between pods</td>
+            </tr>
+            <tr>
+              <td><kbd>Enter</kbd></td>
+              <td>Open pod detail view</td>
+            </tr>
+            <tr>
+              <td><kbd>Esc</kbd></td>
+              <td>Go back / close panel</td>
+            </tr>
+            <tr>
+              <td><kbd>c</kbd></td>
+              <td>Enter chat mode</td>
+            </tr>
+            <tr>
+              <td><kbd>n</kbd></td>
+              <td>Jump to next pod needing attention</td>
+            </tr>
+            <tr>
+              <td><kbd>a</kbd></td>
+              <td>Approve permission request</td>
+            </tr>
+            <tr>
+              <td><kbd>d</kbd></td>
+              <td>Deny permission request</td>
+            </tr>
+            <tr>
+              <td><kbd>/</kbd></td>
+              <td>Open command palette</td>
+            </tr>
+            <tr>
+              <td><kbd>?</kbd></td>
+              <td>Show help</td>
+            </tr>
+            <tr>
+              <td><kbd>q</kbd></td>
+              <td>Quit Apiary</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- Configuration -->
+  <section class="config-section" id="configuration">
+    <div class="container">
+      <div class="fade-in">
+        <div class="section-label">Configuration</div>
+        <h2 class="section-title">Make it yours</h2>
+        <p class="section-desc" style="margin: 0 auto;">Customize Apiary with a simple TOML configuration file.</p>
+      </div>
+      <div class="config-block fade-in">
+        <div class="config-header">~/.config/apiary/config.toml</div>
+        <pre class="config-code"><span class="comment"># Apiary Configuration</span>
+
+<span class="section-head">[general]</span>
+<span class="key">default_shell</span> = <span class="value-str">"zsh"</span>
+<span class="key">log_level</span> = <span class="value-str">"info"</span>
+
+<span class="section-head">[polling]</span>
+<span class="key">active_interval_ms</span> = <span class="value-num">1000</span>
+<span class="key">idle_interval_ms</span> = <span class="value-num">5000</span>
+<span class="key">permission_interval_ms</span> = <span class="value-num">500</span>
+
+<span class="section-head">[display]</span>
+<span class="key">show_elapsed_time</span> = <span class="value-bool">true</span>
+<span class="key">compact_mode</span> = <span class="value-bool">false</span>
+<span class="key">pods_per_row</span> = <span class="value-num">3</span>
+
+<span class="section-head">[worktree]</span>
+<span class="key">base_dir</span> = <span class="value-str">"./worktrees"</span>
+<span class="key">auto_cleanup</span> = <span class="value-bool">true</span></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer>
+    <div class="container">
+      <div class="footer-inner">
+        <div class="footer-left">
+          <span class="footer-logo">apiary</span>
+          <span class="footer-copy">MIT License</span>
+        </div>
+        <div class="footer-links">
+          <a href="#">GitHub</a>
+          <a href="#installation">Install</a>
+          <a href="#features">Features</a>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Scroll Animation -->
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      var observer = new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('visible');
+          }
+        });
+      }, {
+        threshold: 0.1,
+        rootMargin: '0px 0px -40px 0px'
+      });
+
+      document.querySelectorAll('.fade-in').forEach(function (el) {
+        observer.observe(el);
+      });
+    });
+  </script>
+
+</body>
+</html>

@@ -1,0 +1,7 @@
+/target
+
+# Demo artifacts (symlink created by demo setup)
+/claude
+
+# Claude Code local settings
+.claude/settings.local.json

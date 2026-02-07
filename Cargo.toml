@@ -1,0 +1,28 @@
+[package]
+name = "apiary"
+version = "0.1.0"
+edition = "2021"
+description = "Claude Code Multi-Session Manager TUI"
+license = "MIT"
+
+[[bin]]
+name = "apiary"
+path = "src/main.rs"
+
+[dependencies]
+ratatui = "0.29"
+crossterm = "0.28"
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+clap = { version = "4", features = ["derive"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+regex = "1"
+chrono = { version = "0.4", features = ["serde"] }
+dirs = "5"
+anyhow = "1"
+toml = "0.8"
+
+[dev-dependencies]
+tempfile = "3"
