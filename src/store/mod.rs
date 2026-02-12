@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use std::path::PathBuf;
 use tracing::{info, warn};
 
-use crate::pod::Pod;
+use crate::pod::{MemberStatus, Pod, PodStatus};
 use crate::tmux::Tmux;
 
 pub struct PodStore {
@@ -64,8 +64,8 @@ impl PodStore {
         Ok(())
     }
 
-    /// 読み込んだ Pod を tmux の実態と照合し、存在しないセッションの Pod を除外
-    /// 残った Pod の各 member の tmux_pane が存在するかも確認
+    /// 読み込んだ Pod を tmux の実態と照合
+    /// セッションが存在しない Pod は削除せず Dead マークして保持
     pub fn load_and_reconcile(&self) -> Result<Vec<Pod>> {
         let mut pods = self.load()?;
 
@@ -74,19 +74,26 @@ impl PodStore {
         let pane_ids: std::collections::HashSet<String> =
             all_panes.iter().map(|p| p.id.clone()).collect();
 
-        pods.retain(|pod| {
-            if !Tmux::session_exists(&pod.tmux_session) {
-                info!(
-                    session = %pod.tmux_session,
-                    pod = %pod.name,
-                    "Removing pod: tmux session no longer exists"
-                );
-                return false;
-            }
-            true
-        });
-
+        let mut changed = false;
         for pod in &mut pods {
+            if !Tmux::session_exists(&pod.tmux_session) {
+                // セッションが存在しない → Dead マーク（削除しない）
+                if pod.status != PodStatus::Dead {
+                    info!(
+                        session = %pod.tmux_session,
+                        pod = %pod.name,
+                        "Marking pod as Dead: tmux session no longer exists"
+                    );
+                    pod.status = PodStatus::Dead;
+                    for member in &mut pod.members {
+                        member.status = MemberStatus::Dead;
+                    }
+                    changed = true;
+                }
+                continue; // Dead pod の member チェックはスキップ
+            }
+
+            // 生きている pod のみ member の pane 存在チェック
             let before_count = pod.members.len();
             pod.members.retain(|member| {
                 let exists = pane_ids.contains(&member.tmux_pane);
@@ -102,11 +109,13 @@ impl PodStore {
             });
             if pod.members.len() != before_count {
                 pod.rollup_status();
+                changed = true;
             }
         }
 
-        // 整合後の状態を保存
-        self.save(&pods)?;
+        if changed {
+            self.save(&pods)?;
+        }
 
         Ok(pods)
     }
@@ -149,12 +158,16 @@ mod tests {
                 tmux_pane: "%0".to_string(),
                 last_change: Utc::now(),
                 last_output: String::new(),
+                last_output_ansi: String::new(),
+                pane_size: (80, 24),
                 last_polled: None,
                 working_secs: 0,
+                sub_agents: Vec::new(),
             }],
             status: PodStatus::Idle,
             tmux_session: format!("apiary-{}", name),
-            worktree: None,
+            project: None,
+            group: None,
             created_at: Utc::now(),
             total_working_secs: 0,
         }

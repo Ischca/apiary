@@ -1,6 +1,7 @@
 use regex::Regex;
 
 use crate::pod::MemberStatus;
+use crate::pod::SubAgent;
 
 /// 許可リクエストの詳細
 #[derive(Debug, Clone)]
@@ -199,6 +200,108 @@ pub fn rollup_status(statuses: &[MemberStatus]) -> MemberStatus {
         .max_by_key(|s| s.priority())
         .cloned()
         .unwrap_or(MemberStatus::Idle)
+}
+
+// ---------------------------------------------------------------------------
+// Subagent 検出
+// ---------------------------------------------------------------------------
+
+/// capture-pane 出力から実行中の Subagent (Task ツール) を検出する。
+///
+/// Claude Code の実際の表示パターン:
+///   * Worked for 54s · 3 agents running in the background
+///   ►► accept edits on · 3 local agents · ctrl+t to hide task
+///   ● Running 3 Task agents… (ctrl+o to expand)
+///     ├─ description · N tool uses · Nk tokens
+pub fn parse_sub_agents(output: &str) -> Vec<SubAgent> {
+    let trimmed = output.trim();
+    if trimmed.is_empty() {
+        return Vec::new();
+    }
+
+    let expected_count = parse_sub_agent_count(trimmed);
+    if expected_count == 0 {
+        return Vec::new();
+    }
+
+    let mut agents = Vec::new();
+
+    // 個別エージェントの詳細行を検出
+    //   ├─ description · N tool uses · Nk tokens
+    //   └─ description · N tool uses · Nk tokens
+    let detail_re = Regex::new(r"[├└]─\s*(.+?)(?:\s+·\s+\d+\s+tool\s+uses?)?(?:\s+·\s+[\d.]+k?\s+tokens?)?$").ok();
+
+    if let Some(ref re) = detail_re {
+        for line in trimmed.lines() {
+            let line = line.trim();
+            if let Some(caps) = re.captures(line) {
+                if let Some(desc) = caps.get(1) {
+                    let description = desc.as_str().trim().to_string();
+                    let agent_type = infer_agent_type(&description);
+                    agents.push(SubAgent {
+                        agent_type,
+                        description,
+                    });
+                }
+            }
+        }
+    }
+
+    // 詳細行が取れなかった場合、expected_count 分のプレースホルダーを作成
+    if agents.is_empty() && expected_count > 0 {
+        for i in 0..expected_count {
+            agents.push(SubAgent {
+                agent_type: "Task".to_string(),
+                description: format!("agent {}", i + 1),
+            });
+        }
+    }
+
+    agents
+}
+
+/// description からエージェントタイプを推定
+fn infer_agent_type(description: &str) -> String {
+    let lower = description.to_lowercase();
+    if lower.contains("explore") || lower.contains("search") || lower.contains("find") {
+        "Explore".to_string()
+    } else if lower.contains("plan") || lower.contains("design") {
+        "Plan".to_string()
+    } else if lower.contains("test") || lower.contains("build") {
+        "Bash".to_string()
+    } else {
+        "Task".to_string()
+    }
+}
+
+/// capture-pane 出力からエージェント数を返す (0 = なし)
+///
+/// 複数のパターンに対応:
+///   - "N agents running in the background"
+///   - "N local agents"
+///   - "Running N Task agents"
+pub fn parse_sub_agent_count(output: &str) -> usize {
+    // 複数パターンを試行、最大値を返す
+    let patterns = [
+        r"(\d+)\s+agents?\s+running\s+in\s+the\s+background",
+        r"(\d+)\s+local\s+agents?",
+        r"Running\s+(\d+)\s+Task\s+agents?",
+        r"Running\s+(\d+)\s+agents?",
+    ];
+
+    let mut max_count: usize = 0;
+    for pattern in &patterns {
+        if let Ok(re) = Regex::new(pattern) {
+            if let Some(caps) = re.captures(output) {
+                if let Some(m) = caps.get(1) {
+                    if let Ok(n) = m.as_str().parse::<usize>() {
+                        max_count = max_count.max(n);
+                    }
+                }
+            }
+        }
+    }
+    max_count
 }
 
 // ---------------------------------------------------------------------------
@@ -408,5 +511,70 @@ mod tests {
         }
         output.push_str("Allow this? (y/n)");
         assert_eq!(detect_member_status(&output), MemberStatus::Permission);
+    }
+
+    // -----------------------------------------------------------------------
+    // Subagent 検出テスト
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_parse_sub_agents_empty() {
+        assert!(parse_sub_agents("").is_empty());
+        assert!(parse_sub_agents("some regular output").is_empty());
+    }
+
+    #[test]
+    fn test_parse_sub_agents_running_count_only() {
+        let output = "● Running 3 Task agents… (ctrl+o to expand)";
+        let agents = parse_sub_agents(output);
+        assert_eq!(agents.len(), 3);
+        assert_eq!(agents[0].agent_type, "Task");
+    }
+
+    #[test]
+    fn test_parse_sub_agents_with_details() {
+        let output = r#"● Running 2 Task agents… (ctrl+o to expand)
+  ├─ Explore codebase structure · 5 tool uses · 12k tokens
+  └─ Search for test files · 3 tool uses · 8k tokens"#;
+        let agents = parse_sub_agents(output);
+        assert_eq!(agents.len(), 2);
+        assert_eq!(agents[0].agent_type, "Explore");
+        assert!(agents[0].description.contains("Explore codebase"));
+        assert_eq!(agents[1].agent_type, "Explore"); // "Search" triggers Explore
+    }
+
+    #[test]
+    fn test_parse_sub_agent_count() {
+        assert_eq!(parse_sub_agent_count("Running 3 Task agents"), 3);
+        assert_eq!(parse_sub_agent_count("Running 1 Task agent"), 1);
+        assert_eq!(parse_sub_agent_count("no agents here"), 0);
+        assert_eq!(parse_sub_agent_count(""), 0);
+    }
+
+    #[test]
+    fn test_parse_sub_agent_count_real_formats() {
+        // 実際の Claude Code 出力フォーマット
+        assert_eq!(
+            parse_sub_agent_count("* Worked for 54s · 3 agents running in the background"),
+            3
+        );
+        assert_eq!(
+            parse_sub_agent_count("►► accept edits on · 3 local agents · ctrl+t to hide task"),
+            3
+        );
+    }
+
+    #[test]
+    fn test_parse_sub_agents_real_background() {
+        let output = "some output\n* Worked for 54s · 3 agents running in the background\n1 tasks (0 done, 1 in progress)";
+        let agents = parse_sub_agents(output);
+        assert_eq!(agents.len(), 3);
+    }
+
+    #[test]
+    fn test_parse_sub_agents_real_local() {
+        let output = "►► accept edits on · 2 local agents · ctrl+t to hide task";
+        let agents = parse_sub_agents(output);
+        assert_eq!(agents.len(), 2);
     }
 }

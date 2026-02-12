@@ -8,11 +8,17 @@ const HOOKS_FILE: &str = "/tmp/apiary-hooks.jsonl";
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct HookEvent {
-    pub event: String,       // "tool_start", "tool_end", "permission", "error"
+    pub event: String,       // "tool_start", "tool_end", "permission", "error", "subagent_start", "subagent_stop"
     pub tool: Option<String>,
     pub session: Option<String>,
     #[serde(default)]
     pub timestamp: Option<String>,
+    /// Subagent の識別子 (SubagentStart/SubagentStop)
+    #[serde(default)]
+    pub agent_id: Option<String>,
+    /// Subagent のタイプ: "Explore", "Plan", "general-purpose", etc.
+    #[serde(default)]
+    pub agent_type: Option<String>,
 }
 
 impl HookEvent {
@@ -23,8 +29,14 @@ impl HookEvent {
             "tool_end" => Some(MemberStatus::Working), // ツール終了後もまだ処理中
             "permission" => Some(MemberStatus::Permission),
             "error" => Some(MemberStatus::Error),
+            "subagent_start" | "subagent_stop" => Some(MemberStatus::Working),
             _ => None,
         }
+    }
+
+    /// Subagent 関連のイベントかどうか
+    pub fn is_subagent_event(&self) -> bool {
+        matches!(self.event.as_str(), "subagent_start" | "subagent_stop")
     }
 }
 
@@ -109,6 +121,20 @@ pub fn print_hooks_setup() {
     "postToolUse": [{{
       "type": "command",
       "command": "echo '{{\"event\":\"tool_end\",\"tool\":\"$TOOL_NAME\"}}' >> /tmp/apiary-hooks.jsonl"
+    }}],
+    "SubagentStart": [{{
+      "matcher": "*",
+      "hooks": [{{
+        "type": "command",
+        "command": "echo '{{\"event\":\"subagent_start\",\"agent_id\":\"'\"$CLAUDE_AGENT_ID\"'\",\"agent_type\":\"'\"$CLAUDE_AGENT_TYPE\"'\"}}' >> /tmp/apiary-hooks.jsonl"
+      }}]
+    }}],
+    "SubagentStop": [{{
+      "matcher": "*",
+      "hooks": [{{
+        "type": "command",
+        "command": "echo '{{\"event\":\"subagent_stop\",\"agent_id\":\"'\"$CLAUDE_AGENT_ID\"'\",\"agent_type\":\"'\"$CLAUDE_AGENT_TYPE\"'\"}}' >> /tmp/apiary-hooks.jsonl"
+      }}]
     }}]
   }}
 }}"#);

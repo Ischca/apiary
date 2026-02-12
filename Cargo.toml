@@ -5,6 +5,10 @@ edition = "2021"
 description = "Claude Code Multi-Session Manager TUI"
 license = "MIT"
 
+[lib]
+name = "apiary"
+path = "src/lib.rs"
+
 [[bin]]
 name = "apiary"
 path = "src/main.rs"
@@ -23,6 +27,8 @@ chrono = { version = "0.4", features = ["serde"] }
 dirs = "5"
 anyhow = "1"
 toml = "0.8"
+vt100 = "0.15"
+unicode-width = "0.2"
 
 [dev-dependencies]
 tempfile = "3"

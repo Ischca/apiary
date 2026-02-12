@@ -153,6 +153,117 @@ impl Tmux {
         Ok(())
     }
 
+    /// ANSI エスケープ付きで pane の可視領域をキャプチャ (描画用)
+    pub fn capture_pane_ansi(pane_id: &str) -> Result<String> {
+        let output = Command::new("tmux")
+            .args(["capture-pane", "-e", "-p", "-t", pane_id])
+            .output()
+            .with_context(|| format!("Failed to capture pane '{}'", pane_id))?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            anyhow::bail!("capture-pane -e failed for '{}': {}", pane_id, stderr.trim());
+        }
+        Ok(String::from_utf8_lossy(&output.stdout).to_string())
+    }
+
+    /// pane をリサイズ
+    pub fn resize_pane(pane_id: &str, width: u16, height: u16) -> Result<()> {
+        let output = Command::new("tmux")
+            .args([
+                "resize-pane", "-t", pane_id,
+                "-x", &width.to_string(),
+                "-y", &height.to_string(),
+            ])
+            .output()
+            .with_context(|| format!("Failed to resize pane '{}'", pane_id))?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            anyhow::bail!("tmux resize-pane failed for '{}': {}", pane_id, stderr.trim());
+        }
+        Ok(())
+    }
+
+    /// pane が属する window をリサイズ
+    pub fn resize_window(pane_id: &str, width: u16, height: u16) -> Result<()> {
+        // pane → window ターゲット解決
+        let out = Command::new("tmux")
+            .args(["display-message", "-t", pane_id, "-p", "#{session_name}:#{window_index}"])
+            .output()
+            .with_context(|| format!("Failed to resolve window for pane '{}'", pane_id))?;
+        if !out.status.success() {
+            let stderr = String::from_utf8_lossy(&out.stderr);
+            anyhow::bail!("display-message failed for '{}': {}", pane_id, stderr.trim());
+        }
+        let window_target = String::from_utf8_lossy(&out.stdout).trim().to_string();
+
+        let output = Command::new("tmux")
+            .args([
+                "resize-window", "-t", &window_target,
+                "-x", &width.to_string(),
+                "-y", &height.to_string(),
+            ])
+            .output()
+            .with_context(|| format!("Failed to resize window '{}'", window_target))?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            anyhow::bail!("tmux resize-window failed for '{}': {}", window_target, stderr.trim());
+        }
+        Ok(())
+    }
+
+    /// pane が属する window のサイズを取得
+    pub fn get_window_size(pane_id: &str) -> Result<(u16, u16)> {
+        let output = Command::new("tmux")
+            .args(["display-message", "-t", pane_id, "-p", "#{window_width}|#{window_height}"])
+            .output()
+            .with_context(|| format!("Failed to get window size for pane '{}'", pane_id))?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            anyhow::bail!("display-message failed for '{}': {}", pane_id, stderr.trim());
+        }
+        let text = String::from_utf8_lossy(&output.stdout);
+        let parts: Vec<&str> = text.trim().split('|').collect();
+        if parts.len() != 2 {
+            anyhow::bail!("Unexpected window size format: {}", text.trim());
+        }
+        let cols: u16 = parts[0].parse().unwrap_or(80);
+        let rows: u16 = parts[1].parse().unwrap_or(24);
+        Ok((cols, rows))
+    }
+
+    /// pane のサイズ (cols, rows) を取得
+    pub fn get_pane_size(pane_id: &str) -> Result<(u16, u16)> {
+        let output = Command::new("tmux")
+            .args(["display-message", "-t", pane_id, "-p", "#{pane_width}|#{pane_height}"])
+            .output()
+            .with_context(|| format!("Failed to get pane size '{}'", pane_id))?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            anyhow::bail!("display-message failed for '{}': {}", pane_id, stderr.trim());
+        }
+        let text = String::from_utf8_lossy(&output.stdout);
+        let parts: Vec<&str> = text.trim().split('|').collect();
+        if parts.len() != 2 {
+            anyhow::bail!("Unexpected pane size format: {}", text.trim());
+        }
+        let cols: u16 = parts[0].parse().unwrap_or(80);
+        let rows: u16 = parts[1].parse().unwrap_or(24);
+        Ok((cols, rows))
+    }
+
+    /// リテラルテキスト送信 (-l フラグで特殊文字をエスケープせずそのまま送信)
+    pub fn send_keys_literal(pane_id: &str, text: &str) -> Result<()> {
+        let output = Command::new("tmux")
+            .args(["send-keys", "-l", "-t", pane_id, text])
+            .output()
+            .with_context(|| format!("Failed to send literal keys to '{}'", pane_id))?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            anyhow::bail!("send-keys -l failed for '{}': {}", pane_id, stderr.trim());
+        }
+        Ok(())
+    }
+
     /// ペインにキー入力を送信 (Enter なし)
     pub fn send_keys_raw(pane_id: &str, keys: &str) -> Result<()> {
         let output = Command::new("tmux")
@@ -202,10 +313,24 @@ impl Tmux {
         Ok(())
     }
 
+    /// ペインを終了
+    pub fn kill_pane(pane_id: &str) -> Result<()> {
+        let output = Command::new("tmux")
+            .args(["kill-pane", "-t", pane_id])
+            .output()
+            .with_context(|| format!("Failed to kill tmux pane '{}'", pane_id))?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            anyhow::bail!("tmux kill-pane failed for '{}': {}", pane_id, stderr.trim());
+        }
+        Ok(())
+    }
+
     /// セッションを終了
     pub fn kill_session(name: &str) -> Result<()> {
+        let exact = format!("={}", name);
         let output = Command::new("tmux")
-            .args(["kill-session", "-t", name])
+            .args(["kill-session", "-t", &exact])
             .output()
             .with_context(|| format!("Failed to kill tmux session '{}'", name))?;
 
@@ -217,10 +342,85 @@ impl Tmux {
         Ok(())
     }
 
+    /// 現在の tmux prefix キーを取得 (例: "C-b", "C-a")
+    pub fn get_prefix() -> String {
+        Command::new("tmux")
+            .args(["show-options", "-gv", "prefix"])
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+            .unwrap_or_else(|| "C-b".to_string())
+    }
+
+    /// pipe-pane でペインの PTY 出力をファイルにストリーム開始
+    pub fn pipe_pane_start(pane_id: &str, output_path: &str) -> Result<()> {
+        // 既存の pipe を停止
+        let _ = Self::pipe_pane_stop(pane_id);
+
+        let cmd = format!("cat >> {}", output_path);
+        let output = Command::new("tmux")
+            .args(["pipe-pane", "-O", "-t", pane_id, &cmd])
+            .output()
+            .with_context(|| format!("Failed to start pipe-pane for '{}'", pane_id))?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            anyhow::bail!("tmux pipe-pane start failed for '{}': {}", pane_id, stderr.trim());
+        }
+        Ok(())
+    }
+
+    /// pipe-pane を停止
+    pub fn pipe_pane_stop(pane_id: &str) -> Result<()> {
+        let output = Command::new("tmux")
+            .args(["pipe-pane", "-t", pane_id])
+            .output()
+            .with_context(|| format!("Failed to stop pipe-pane for '{}'", pane_id))?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            anyhow::bail!("tmux pipe-pane stop failed for '{}': {}", pane_id, stderr.trim());
+        }
+        Ok(())
+    }
+
+    /// セッションにアタッチ (tmux外: attach-session, tmux内: switch-client)
+    /// 戻り値: Ok(true) = blocking attach, Ok(false) = switch-client
+    pub fn attach_session(name: &str) -> Result<bool> {
+        if std::env::var("TMUX").is_ok() {
+            // tmux 内: switch-client (non-blocking)
+            let output = Command::new("tmux")
+                .args(["switch-client", "-t", name])
+                .output()
+                .with_context(|| format!("Failed to switch to tmux session '{}'", name))?;
+
+            if !output.status.success() {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                anyhow::bail!("tmux switch-client failed for '{}': {}", name, stderr.trim());
+            }
+            Ok(false)
+        } else {
+            // tmux 外: attach-session (blocking, stdio 継承)
+            let status = Command::new("tmux")
+                .args(["attach-session", "-t", name])
+                .stdin(std::process::Stdio::inherit())
+                .stdout(std::process::Stdio::inherit())
+                .stderr(std::process::Stdio::inherit())
+                .status()
+                .with_context(|| format!("Failed to attach to tmux session '{}'", name))?;
+
+            if !status.success() {
+                anyhow::bail!("tmux attach-session failed for '{}'", name);
+            }
+            Ok(true)
+        }
+    }
+
     /// セッションが存在するか確認
     pub fn session_exists(name: &str) -> bool {
+        // "=" プレフィックスで完全一致（tmux はデフォルトでプレフィックスマッチする）
+        let exact = format!("={}", name);
         Command::new("tmux")
-            .args(["has-session", "-t", name])
+            .args(["has-session", "-t", &exact])
             .output()
             .map(|o| o.status.success())
             .unwrap_or(false)

@@ -2,9 +2,18 @@ pub mod detector;
 pub mod discovery;
 
 use std::collections::HashSet;
+use std::path::PathBuf;
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+
+/// Task ツールで起動される Subagent の情報
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SubAgent {
+    pub agent_type: String,  // "Explore", "Plan", "general-purpose", etc.
+    pub description: String, // short description from pane output
+}
+
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum MemberStatus {
@@ -13,6 +22,7 @@ pub enum MemberStatus {
     Permission,
     Error,
     Done,
+    Dead,
 }
 
 impl MemberStatus {
@@ -23,6 +33,7 @@ impl MemberStatus {
             MemberStatus::Working => "\u{1f504}",
             MemberStatus::Idle => "\u{23f8}",
             MemberStatus::Done => "\u{2705}",
+            MemberStatus::Dead => "\u{1f480}",
         }
     }
 
@@ -33,6 +44,7 @@ impl MemberStatus {
             MemberStatus::Working => 2,
             MemberStatus::Idle => 1,
             MemberStatus::Done => 0,
+            MemberStatus::Dead => 0,
         }
     }
 }
@@ -44,6 +56,7 @@ pub enum PodStatus {
     Permission,
     Error,
     Done,
+    Dead,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -60,9 +73,17 @@ pub struct Member {
     pub last_change: DateTime<Utc>,
     pub last_output: String,
     #[serde(skip)]
+    pub last_output_ansi: String,
+    /// pane サイズ (cols, rows) — ANSI 描画時に vt100 パーサーへ渡す
+    #[serde(skip)]
+    pub pane_size: (u16, u16),
+    #[serde(skip)]
     pub last_polled: Option<std::time::Instant>,
     #[serde(default)]
     pub working_secs: u64,
+    /// pane 出力から検出された実行中の Subagent (Task ツール)
+    #[serde(skip)]
+    pub sub_agents: Vec<SubAgent>,
 }
 
 impl Member {
@@ -73,6 +94,10 @@ impl Member {
     pub fn elapsed(&self) -> String {
         format_elapsed(self.last_change)
     }
+
+    pub fn sub_agent_count(&self) -> usize {
+        self.sub_agents.len()
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -82,7 +107,10 @@ pub struct Pod {
     pub members: Vec<Member>,
     pub status: PodStatus,
     pub tmux_session: String,
-    pub worktree: Option<String>,
+    #[serde(alias = "worktree")]
+    pub project: Option<String>,
+    #[serde(default)]
+    pub group: Option<String>,
     pub created_at: DateTime<Utc>,
     #[serde(default)]
     pub total_working_secs: u64,
@@ -92,6 +120,12 @@ impl Pod {
     pub fn rollup_status(&mut self) {
         if self.members.is_empty() {
             self.status = PodStatus::Idle;
+            return;
+        }
+
+        // 全メンバーが Dead なら Pod も Dead
+        if self.members.iter().all(|m| m.status == MemberStatus::Dead) {
+            self.status = PodStatus::Dead;
             return;
         }
 
@@ -126,12 +160,18 @@ impl Pod {
             PodStatus::Working => "\u{1f504}",
             PodStatus::Idle => "\u{23f8}",
             PodStatus::Done => "\u{2705}",
+            PodStatus::Dead => "\u{1f480}",
         }
     }
 
     /// 全 member の working 秒数の合計
     pub fn total_working_time(&self) -> u64 {
         self.members.iter().map(|m| m.working_secs).sum::<u64>() + self.total_working_secs
+    }
+
+    /// 全 member の sub_agents 合計数
+    pub fn total_sub_agents(&self) -> usize {
+        self.members.iter().map(|m| m.sub_agent_count()).sum()
     }
 
     /// 全体の経過時間（秒）
@@ -147,6 +187,34 @@ pub enum Mode {
     Chat,
     Permission,
     Help,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PaneFocus {
+    Left,
+    Right,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum InlinePrompt {
+    None,
+    AdoptSession,
+    DropConfirm(String),
+    Browse,
+}
+
+#[derive(Debug, Clone)]
+pub struct BrowserEntry {
+    pub name: String,
+    pub is_dir: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct BrowserState {
+    pub current_path: PathBuf,
+    pub entries: Vec<BrowserEntry>,
+    pub selected: usize,
+    pub scroll_offset: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -172,6 +240,15 @@ pub struct AppState {
     pub current_permission: Option<crate::pod::detector::PermissionRequest>,
     pub previous_permission_pods: HashSet<String>,
     pub previous_mode: Option<Mode>,
+    pub inline_prompt: InlinePrompt,
+    pub inline_input: String,
+    pub pane_focus: PaneFocus,
+    pub browser_state: Option<BrowserState>,
+    pub current_project: Option<crate::project::Project>,
+    /// Detail モード開始前の window サイズ (pane_id, cols, rows)
+    pub detail_original_window_size: Option<(String, u16, u16)>,
+    /// リサイズ直後フラグ (キャプチャを1サイクルスキップ)
+    pub detail_just_resized: bool,
 }
 
 impl AppState {
@@ -191,6 +268,13 @@ impl AppState {
             current_permission: None,
             previous_permission_pods: HashSet::new(),
             previous_mode: None,
+            inline_prompt: InlinePrompt::None,
+            inline_input: String::new(),
+            pane_focus: PaneFocus::Right,
+            browser_state: None,
+            current_project: None,
+            detail_original_window_size: None,
+            detail_just_resized: false,
         }
     }
 

@@ -1,20 +1,24 @@
-use crate::pod::Mode;
-use crate::tui::app::{App, Direction};
+use crate::pod::{InlinePrompt, Mode, PaneFocus};
+use crate::tui::app::{App, Direction, generate_pod_name};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 pub enum Action {
     None,
     Quit,
     Render,
+    AttachTmux(String),
 }
 
 pub fn handle_key_event(app: &mut App, key: KeyEvent) -> Action {
-    // Ctrl+C は常に終了
-    if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
-        return Action::Quit;
+    // Detail モード (パススルー) では Ctrl+C も pane に転送するため、ここでは除外
+    if app.state.mode != Mode::Detail {
+        // Ctrl+C は終了
+        if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
+            return Action::Quit;
+        }
     }
 
-    // ? キーは全モードで Help トグル (ただし Chat/Home の入力モード中は除く)
+    // ? キーは全モードで Help トグル (ただし Chat/Home の入力モード中/Detail パススルー中は除く)
     if key.code == KeyCode::Char('?') {
         match app.state.mode {
             Mode::Help => {
@@ -22,11 +26,12 @@ pub fn handle_key_event(app: &mut App, key: KeyEvent) -> Action {
                 app.state.previous_mode = None;
                 return Action::Render;
             }
-            Mode::Home if !app.state.command_input.is_empty() => {
-                // コマンド入力中は ? を文字として処理 (下の match に流す)
+            Mode::Home if app.state.pane_focus == PaneFocus::Left
+                || app.state.inline_prompt != InlinePrompt::None => {
+                // 左ペイン入力中またはインラインプロンプト中は ? を文字として処理
             }
-            Mode::Chat => {
-                // Chat モードでは ? を文字として処理 (下の match に流す)
+            Mode::Chat | Mode::Detail => {
+                // Chat モード / Detail パススルーモードでは ? を文字として処理
             }
             _ => {
                 app.state.previous_mode = Some(app.state.mode.clone());
@@ -45,24 +50,53 @@ pub fn handle_key_event(app: &mut App, key: KeyEvent) -> Action {
     }
 }
 
+pub fn handle_paste_event(app: &mut App, text: &str) {
+    match app.state.mode {
+        Mode::Home => {
+            if app.state.inline_prompt == InlinePrompt::None {
+                app.state.pane_focus = PaneFocus::Left;
+                if app.state.inline_input.is_empty() {
+                    app.state.status_message = None;
+                }
+            }
+            if app.state.inline_prompt == InlinePrompt::None
+                || matches!(app.state.inline_prompt, InlinePrompt::AdoptSession)
+            {
+                app.state.inline_input.push_str(text);
+            }
+        }
+        Mode::Chat => {
+            app.state.chat_input.push_str(text);
+        }
+        Mode::Detail => {
+            if let Err(e) = app.forward_paste_to_pane(text) {
+                app.state.status_message = Some(format!("Paste error: {}", e));
+            }
+        }
+        _ => {}
+    }
+}
+
 fn handle_home_keys(app: &mut App, key: KeyEvent) -> Action {
-    // コマンド入力モード中
-    if !app.state.command_input.is_empty() {
-        return handle_command_input(app, key);
+    // インラインプロンプト中 (drop 確認, adopt)
+    if app.state.inline_prompt != InlinePrompt::None {
+        return handle_inline_prompt(app, key);
     }
 
+    match app.state.pane_focus {
+        PaneFocus::Right => handle_home_right_keys(app, key),
+        PaneFocus::Left => handle_home_left_keys(app, key),
+    }
+}
+
+/// 右ペインフォーカス時: Pod ナビゲーション + ショートカット
+fn handle_home_right_keys(app: &mut App, key: KeyEvent) -> Action {
     match key.code {
         KeyCode::Char('q') => Action::Quit,
-        KeyCode::Char('/') => {
-            // コマンド入力モードに入る (空文字列で開始はしない、/ は表示用)
-            // command_input にスペースを入れてアクティブにする代わりに
-            // フラグとして空文字でない状態を作る
-            app.state.command_input = String::new();
-            // 実際にはここで "/" を打ったら入力モードに入るが、
-            // command_input が空のままだとすぐ通常モードに戻るので
-            // 最初の "/" は飲み込んで入力モードのマーカーとする
-            app.state.command_input.push(' ');
-            app.state.status_message = None;
+        KeyCode::Tab | KeyCode::Char('n') => {
+            // 左ペインにフォーカス切り替え
+            app.state.pane_focus = PaneFocus::Left;
+            app.state.inline_input.clear();
             Action::Render
         }
         KeyCode::Left => {
@@ -97,57 +131,255 @@ fn handle_home_keys(app: &mut App, key: KeyEvent) -> Action {
             app.move_focus(Direction::Down);
             Action::Render
         }
-        KeyCode::Enter => {
-            if app.state.focus.is_some() {
-                // Permission 状態なら Permission モードへ
-                let is_permission = app
-                    .state
-                    .focused_pod()
-                    .map(|p| p.status == crate::pod::PodStatus::Permission)
-                    .unwrap_or(false);
-                if is_permission {
+        KeyCode::Enter | KeyCode::Char('i') => {
+            // Detail モード (Permission 状態なら Permission モードへ)
+            if let Some(pod) = app.state.focused_pod() {
+                if pod.status == crate::pod::PodStatus::Permission {
                     app.state.mode = Mode::Permission;
                 } else {
                     app.state.mode = Mode::Detail;
+                    app.state.selected_member = Some(0);
+                    app.start_detail_pty_stream();
                 }
                 app.state.selected_member = Some(0);
+                app.state.chat_input.clear();
             }
             Action::Render
         }
-        KeyCode::Char('n') => {
-            // 次の Permission Pod にジャンプ (wrap-around)
+        KeyCode::Char('t') => {
+            // tmux セッションにアタッチ
+            if let Some(pod) = app.state.focused_pod() {
+                let session = pod.tmux_session.clone();
+                return Action::AttachTmux(session);
+            }
+            Action::Render
+        }
+        KeyCode::Char('N') => {
+            // 次の Permission Pod にジャンプ
             if let Some(idx) = app.next_permission_pod_from_current() {
                 app.state.focus = Some(idx);
             }
+            Action::Render
+        }
+        KeyCode::Char('a') => {
+            // Adopt セッション (インラインプロンプト)
+            app.state.inline_prompt = InlinePrompt::AdoptSession;
+            app.state.inline_input.clear();
+            app.state.status_message = None;
+            Action::Render
+        }
+        KeyCode::Char('d') => {
+            // Drop 確認 (インラインプロンプト)
+            if let Some(pod) = app.state.focused_pod() {
+                let name = pod.name.clone();
+                app.state.inline_prompt = InlinePrompt::DropConfirm(name);
+                app.state.inline_input.clear();
+                app.state.status_message = None;
+            }
+            Action::Render
+        }
+        KeyCode::Char('p') => {
+            // ディレクトリブラウザを開く
+            app.open_browser(None);
+            Action::Render
+        }
+        KeyCode::Char(c) => {
+            // ショートカットに該当しない文字 → 左ペインに切り替えて1文字目として入力
+            app.state.pane_focus = PaneFocus::Left;
+            app.state.inline_input.clear();
+            app.state.inline_input.push(c);
             Action::Render
         }
         _ => Action::None,
     }
 }
 
-/// コマンド入力モードのキー処理
-fn handle_command_input(app: &mut App, key: KeyEvent) -> Action {
+/// 左ペインフォーカス時: 指示入力 + スラッシュコマンド
+fn handle_home_left_keys(app: &mut App, key: KeyEvent) -> Action {
     match key.code {
-        KeyCode::Esc => {
-            app.state.command_input.clear();
-            app.state.status_message = None;
+        KeyCode::Esc | KeyCode::Tab => {
+            app.state.pane_focus = PaneFocus::Right;
             Action::Render
         }
         KeyCode::Enter => {
-            let cmd = app.state.command_input.trim().to_string();
-            app.state.command_input.clear();
+            let input = app.state.inline_input.trim().to_string();
+            app.state.inline_input.clear();
 
-            if cmd.is_empty() {
+            if input.is_empty() {
                 return Action::Render;
             }
 
-            match app.execute_command(&cmd) {
-                Ok(msg) => {
-                    app.state.status_message = if msg.is_empty() {
-                        None
+            if let Some(cmd) = input.strip_prefix('/') {
+                // スラッシュコマンド: 先頭の / を取り除いて execute_command に渡す
+                match app.execute_command(cmd) {
+                    Ok(msg) => {
+                        app.state.status_message = if msg.is_empty() {
+                            None
+                        } else {
+                            Some(msg)
+                        };
+                    }
+                    Err(e) => {
+                        app.state.status_message = Some(format!("Error: {}", e));
+                    }
+                }
+            } else {
+                // 指示 → Pod 自動作成
+                let (instruction, project_input) = parse_at_project(&input);
+                let names: Vec<String> = app.state.pods.iter().map(|p| p.name.clone()).collect();
+                let name = generate_pod_name(&instruction, &names);
+                match app.create_pod(&name, project_input.as_deref(), None, Some(&instruction)) {
+                    Ok(()) => {
+                        // 新しい Pod にフォーカス
+                        let new_idx = app.state.pods.len().saturating_sub(1);
+                        app.state.focus = Some(new_idx);
+                        app.state.status_message = Some(format!("Pod '{}' created", name));
+                    }
+                    Err(e) => {
+                        app.state.status_message = Some(format!("Error: {}", e));
+                    }
+                }
+            }
+
+            Action::Render
+        }
+        KeyCode::Backspace => {
+            app.state.inline_input.pop();
+            Action::Render
+        }
+        KeyCode::Char(c) => {
+            // 入力開始時に前回の結果メッセージをクリア
+            if app.state.inline_input.is_empty() {
+                app.state.status_message = None;
+            }
+            app.state.inline_input.push(c);
+            Action::Render
+        }
+        _ => Action::None,
+    }
+}
+
+/// "instruction @project" 構文をパース
+fn parse_at_project(input: &str) -> (String, Option<String>) {
+    if let Some(at_pos) = input.rfind('@') {
+        let instruction = input[..at_pos].trim().to_string();
+        let project = input[at_pos + 1..].trim().to_string();
+        if project.is_empty() {
+            (input.to_string(), None)
+        } else {
+            (instruction, Some(project))
+        }
+    } else {
+        (input.to_string(), None)
+    }
+}
+
+/// インラインプロンプトのキー処理
+fn handle_inline_prompt(app: &mut App, key: KeyEvent) -> Action {
+    if app.state.inline_prompt == InlinePrompt::Browse {
+        return handle_browser_keys(app, key);
+    }
+
+    match key.code {
+        KeyCode::Esc => {
+            app.state.inline_prompt = InlinePrompt::None;
+            app.state.inline_input.clear();
+            Action::Render
+        }
+        KeyCode::Enter => {
+            let input = app.state.inline_input.trim().to_string();
+            let prompt = app.state.inline_prompt.clone();
+            app.state.inline_prompt = InlinePrompt::None;
+            app.state.inline_input.clear();
+
+            match prompt {
+                InlinePrompt::AdoptSession => {
+                    if input.is_empty() {
+                        return Action::Render;
+                    }
+                    let parts: Vec<&str> = input.split_whitespace().collect();
+                    let session = parts[0];
+                    let group = parts
+                        .iter()
+                        .position(|&p| p == "--group")
+                        .and_then(|i| parts.get(i + 1))
+                        .copied();
+                    match app.adopt_session(session, None, group) {
+                        Ok(()) => {
+                            app.state.status_message =
+                                Some(format!("Session '{}' adopted", session));
+                        }
+                        Err(e) => {
+                            app.state.status_message = Some(format!("Error: {}", e));
+                        }
+                    }
+                }
+                InlinePrompt::DropConfirm(name) => {
+                    if input == "y" || input == "yes" {
+                        match app.drop_pod(&name) {
+                            Ok(()) => {
+                                app.state.status_message = Some(format!("Pod '{}' dropped", name));
+                            }
+                            Err(e) => {
+                                app.state.status_message = Some(format!("Error: {}", e));
+                            }
+                        }
                     } else {
-                        Some(msg)
-                    };
+                        app.state.status_message = Some("Drop cancelled".to_string());
+                    }
+                }
+                InlinePrompt::Browse => {} // handled above
+                InlinePrompt::None => {}
+            }
+            Action::Render
+        }
+        KeyCode::Backspace => {
+            app.state.inline_input.pop();
+            Action::Render
+        }
+        KeyCode::Char(c) => {
+            app.state.inline_input.push(c);
+            Action::Render
+        }
+        _ => Action::None,
+    }
+}
+
+/// ブラウザモードのキー処理
+fn handle_browser_keys(app: &mut App, key: KeyEvent) -> Action {
+    match key.code {
+        KeyCode::Esc => {
+            app.browser_cancel();
+            Action::Render
+        }
+        KeyCode::Char('j') | KeyCode::Down => {
+            if let Some(bs) = &mut app.state.browser_state {
+                if !bs.entries.is_empty() && bs.selected < bs.entries.len() - 1 {
+                    bs.selected += 1;
+                }
+            }
+            Action::Render
+        }
+        KeyCode::Char('k') | KeyCode::Up => {
+            if let Some(bs) = &mut app.state.browser_state {
+                if bs.selected > 0 {
+                    bs.selected -= 1;
+                }
+            }
+            Action::Render
+        }
+        KeyCode::Enter | KeyCode::Char('l') | KeyCode::Right => {
+            app.browser_enter_dir();
+            Action::Render
+        }
+        KeyCode::Char('h') | KeyCode::Left | KeyCode::Backspace => {
+            app.browser_go_parent();
+            Action::Render
+        }
+        KeyCode::Char(' ') => {
+            match app.browser_select_current() {
+                Ok(msg) => {
+                    app.state.status_message = Some(msg);
                 }
                 Err(e) => {
                     app.state.status_message = Some(format!("Error: {}", e));
@@ -155,71 +387,35 @@ fn handle_command_input(app: &mut App, key: KeyEvent) -> Action {
             }
             Action::Render
         }
-        KeyCode::Backspace => {
-            app.state.command_input.pop();
-            Action::Render
-        }
-        KeyCode::Char(c) => {
-            app.state.command_input.push(c);
-            Action::Render
-        }
         _ => Action::None,
     }
 }
 
 fn handle_detail_keys(app: &mut App, key: KeyEvent) -> Action {
-    match key.code {
-        KeyCode::Esc => {
-            app.state.mode = Mode::Home;
-            app.state.selected_member = None;
-            Action::Render
-        }
-        KeyCode::Char('c') => {
-            app.state.mode = Mode::Chat;
-            app.state.chat_input.clear();
-            Action::Render
-        }
-        KeyCode::Char('p') => {
-            // Permission モードへ (該当 member がいる場合)
-            let has_permission = app
-                .state
-                .focused_pod()
-                .map(|p| {
-                    p.members
-                        .iter()
-                        .any(|m| m.status == crate::pod::MemberStatus::Permission)
-                })
-                .unwrap_or(false);
-            if has_permission {
-                app.state.mode = Mode::Permission;
-            }
-            Action::Render
-        }
-        KeyCode::Up | KeyCode::Char('k') => {
-            // member 選択を上に移動
-            if let Some(ref mut sel) = app.state.selected_member {
-                if *sel > 0 {
-                    *sel -= 1;
-                }
-            }
-            Action::Render
-        }
-        KeyCode::Down | KeyCode::Char('j') => {
-            // member 選択を下に移動
-            let member_count = app
-                .state
-                .focused_pod()
-                .map(|p| p.members.len())
-                .unwrap_or(0);
-            if let Some(ref mut sel) = app.state.selected_member {
-                if *sel + 1 < member_count {
-                    *sel += 1;
-                }
-            }
-            Action::Render
-        }
-        _ => Action::None,
+    // Esc でパススルー終了 → Home に戻る
+    if key.code == KeyCode::Esc {
+        app.restore_detail_window_size();
+        app.state.mode = Mode::Home;
+        app.state.selected_member = None;
+        return Action::Render;
     }
+
+    // Pod が Dead なら Home に戻す (dead pane にキーを送っても意味がない)
+    let is_dead = app.state.focused_pod()
+        .map(|p| p.status == crate::pod::PodStatus::Dead)
+        .unwrap_or(true);
+    if is_dead {
+        app.restore_detail_window_size();
+        app.state.mode = Mode::Home;
+        app.state.selected_member = None;
+        return Action::Render;
+    }
+
+    // 全キーを pane に転送 (パススルーモード)
+    if let Err(e) = app.forward_key_to_pane(&key) {
+        app.state.status_message = Some(format!("Key error: {}", e));
+    }
+    Action::Render
 }
 
 fn handle_chat_keys(app: &mut App, key: KeyEvent) -> Action {
